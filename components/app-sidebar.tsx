@@ -48,12 +48,12 @@ const data = {
       icon: LayoutDashboard,
     },
     {
-      title: "Gestão de Serviços",
+      title: "Serviços",
       url: "/dashboard/services",
       icon: FileText,
     },
     {
-      title: "Gestão da Frota",
+      title: "Frota",
       icon: Truck,
       items: [
         {
@@ -67,7 +67,7 @@ const data = {
       ],
     },
     {
-      title: "Controle Financeiro",
+      title: "Financeiro",
       icon: DollarSign,
       items: [
         {
@@ -81,12 +81,12 @@ const data = {
       ],
     },
     {
-      title: "Gestão de Pessoas",
+      title: "RH",
       url: "/dashboard/people/employees",
       icon: Users,
     },
     {
-      title: "Clientes e Fornecedores",
+      title: "Associados",
       icon: Building2,
       items: [
         {
@@ -100,7 +100,7 @@ const data = {
       ],
     },
     {
-      title: "Controle de Combustível",
+      title: "Combustivel",
       url: "/dashboard/fuel",
       icon: Fuel,
     },

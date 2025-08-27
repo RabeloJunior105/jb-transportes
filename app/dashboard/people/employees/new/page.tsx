@@ -1,99 +1,59 @@
-
 "use client";
 
-import RecordForm from "@/components/RecordForm/form.record"
-import { createEmployeeClient } from "@/lib/supabase/client/people.client"
 
+import RecordForm from "@/components/RecordForm/form.record";
+import { createCrudClient } from "@/lib/supabase-crud/client/client";
+import { CreateEmployee } from "@/lib/supabase-crud/types";
+import type { Employee } from "@/lib/supabase/types/people.types";
+import { z } from "zod";
+import { employeeFormConfig } from "../config";
 
-const employeeFormConfig = {
-  title: "Funcionário",
-  description: "Gerencie os dados do funcionário",
-  groups: [
-    {
-      title: "Informações Pessoais",
-      description: "Dados pessoais do funcionário",
-      fields: [
-        { name: "name", label: "Nome Completo", type: "text" as const, required: true },
-        { name: "cpf", label: "CPF", type: "text" as const, required: true },
-        { name: "phone", label: "Telefone", type: "text" as const, required: true },
-        { name: "email", label: "E-mail", type: "email" as const },
-      ],
-    },
-    {
-      title: "Endereço",
-      description: "Endereço residencial do funcionário",
-      fields: [
-        { name: "address", label: "Endereço", type: "text" as const },
-        { name: "city", label: "Cidade", type: "text" as const },
-        {
-          name: "state",
-          label: "Estado",
-          type: "select" as const,
-          options: ["SP", "RJ", "MG", "RS", "PR", "SC"].map(uf => ({ label: uf, value: uf }))
-        },
-        { name: "cep", label: "CEP", type: "text" as const },
-      ],
-    },
-    {
-      title: "Informações Profissionais",
-      description: "Dados relacionados ao trabalho",
-      fields: [
-        {
-          name: "position",
-          label: "Cargo",
-          type: "select" as const,
-          required: true,
-          options: [
-            { label: "Motorista", value: "motorista" },
-            { label: "Ajudante", value: "ajudante" },
-            { label: "Mecânico", value: "mecanico" },
-            { label: "Administrativo", value: "administrativo" },
-            { label: "Gerente", value: "gerente" },
-            { label: "Diretor", value: "diretor" },
-          ],
-        },
-        { name: "hire_date", label: "Data de Admissão", type: "date" as const, required: true },
-        { name: "salary", label: "Salário", type: "number" as const },
-        {
-          name: "status",
-          label: "Status",
-          type: "select" as const,
-          required: true,
-          options: [
-            { label: "Ativo", value: "active" },
-            { label: "Férias", value: "vacation" },
-            { label: "Afastado", value: "inactive" },
-            { label: "Demitido", value: "demitido" },
-          ],
-        },
-      ],
-    },
-    {
-      title: "Documentos",
-      description: "CNH e outros documentos",
-      fields: [
-        { name: "cnh_number", label: "Número da CNH", type: "text" as const },
-        {
-          name: "cnh_category",
-          label: "Categoria CNH",
-          type: "select" as const,
-          options: ["A", "B", "C", "D", "E"].map(c => ({ label: c, value: c }))
-        },
-        { name: "cnh_expiry", label: "Vencimento CNH", type: "date" as const },
-      ],
-    },
-  ],
-}
+const Employees = createCrudClient<Employee, CreateEmployee>({
+  table: "employees",
+  select: "*",
+  defaultOrder: { column: "created_at", ascending: false },
+});
 
+const schema = z.object({
+  // pessoais
+  name: z.string().min(2, "Nome muito curto"),
+  cpf: z.string().min(11, "CPF inválido"), // ajuste a validação conforme precisar
+  phone: z.string().min(8, "Telefone inválido"),
+  email: z.string().email().optional().or(z.literal("")),
+
+  // endereço (opcionais)
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.enum(["SP", "RJ", "MG", "RS", "PR", "SC"]).optional(),
+  cep: z.string().optional(),
+
+  // profissionais
+  position: z.enum(["motorista", "ajudante", "mecanico", "administrativo", "gerente", "diretor"]),
+  hire_date: z.string().min(1, "Data de admissão é obrigatória"),
+  salary: z.coerce.number().optional(),
+  status: z.enum(["active", "vacation", "inactive", "demitido"]),
+
+  // documentos
+  cnh_number: z.string().optional(),
+  cnh_category: z.enum(["A", "B", "C", "D", "E"]).optional(),
+  cnh_expiry: z.string().optional(),
+});
 
 export default function NewEmployeePage() {
-  const handleCreate = async (values: any) => {
-    await createEmployeeClient(values)
-  }
-
   return (
-    <div className="flex-1 p-4 md:p-8 pt-6">
-      <RecordForm config={employeeFormConfig} onSubmit={handleCreate} />
-    </div>
-  )
+    <RecordForm
+      config={employeeFormConfig}
+      initialValues={{ status: "active" }}
+      schema={schema}
+      typeHints={{
+        hire_date: "date",     // transforma para ISO antes de enviar
+        cnh_expiry: "date",
+        salary: "number",
+      }}
+      onSubmit={async (values) => {
+        await Employees.create(values as CreateEmployee);
+      }}
+      backHref="/dashboard/people/employees"
+    />
+  );
 }

@@ -101,3 +101,10 @@ export interface CreateSupplierData {
   category: string;
   status: string;
 }
+
+export interface EmployeesSummary {
+  totalEmployees: number;
+  activeEmployees: number;
+  drivers: number;
+  licenseExpiring: number;
+}
