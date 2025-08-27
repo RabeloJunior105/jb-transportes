@@ -339,18 +339,24 @@ export default function EmployeesPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
-                              <Eye className="mr-2 h-4 w-4" />
-                              Visualizar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <CreditCard className="mr-2 h-4 w-4" />
-                              Renovar CNH
-                            </DropdownMenuItem>
+                            <Link href={`/dashboard/people/employees/${employee.id}`}>
+                              <DropdownMenuItem>
+                                <Eye className="mr-2 h-4 w-4" />
+                                Visualizar
+                              </DropdownMenuItem>
+                            </Link>
+                            <Link href={`/dashboard/people/employees/${employee.id}`}>
+                              <DropdownMenuItem>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Editar
+                              </DropdownMenuItem>
+                            </Link>
+                            <Link href={`/dashboard/people/employees/${employee.id}/renew-license`}>
+                              <DropdownMenuItem>
+                                <CreditCard className="mr-2 h-4 w-4" />
+                                Renovar CNH
+                              </DropdownMenuItem>
+                            </Link>
                             <DropdownMenuItem
                               className="text-destructive"
                               onClick={() => handleDeleteEmployee(employee.id)}

@@ -30,6 +30,12 @@ export async function getEmployeeClient(id: string): Promise<Employee> {
 
 export async function createEmployeeClient(employeeData: CreateEmployeeData): Promise<Employee> {
     const supabase = createBrowserClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) throw new Error("User not authenticated");
+
+    employeeData.user_id = user.id;
+
     const { data, error } = await supabase.from("employees").insert(employeeData).select().single();
 
     if (error) throw error;

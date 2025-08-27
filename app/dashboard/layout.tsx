@@ -1,6 +1,7 @@
 "use client"
 
-import type React from "react"
+import React from "react"
+import { usePathname } from "next/navigation"
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
@@ -14,11 +15,16 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+// Função simples para capitalizar as palavras
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname() // /dashboard/people/employees
+  const segments = pathname?.split("/").filter(Boolean) || [] // ['dashboard','people','employees']
+
+  // Construir o caminho incremental para cada segmento
+  let pathAccumulator = ""
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -29,12 +35,24 @@ export default function DashboardLayout({
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="/dashboard">JB Transportes</BreadcrumbLink>
+                <BreadcrumbLink href="/">Home</BreadcrumbLink>
               </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Dashboard</BreadcrumbPage>
-              </BreadcrumbItem>
+              {segments.map((segment, idx) => {
+                pathAccumulator += `/${segment}`
+                const isLast = idx === segments.length - 1
+                return (
+                  <React.Fragment key={pathAccumulator}>
+                    <BreadcrumbSeparator className="hidden md:block" />
+                    <BreadcrumbItem>
+                      {isLast ? (
+                        <BreadcrumbPage>{capitalize(segment)}</BreadcrumbPage>
+                      ) : (
+                        <BreadcrumbLink href={pathAccumulator}>{capitalize(segment)}</BreadcrumbLink>
+                      )}
+                    </BreadcrumbItem>
+                  </React.Fragment>
+                )
+              })}
             </BreadcrumbList>
           </Breadcrumb>
         </header>
