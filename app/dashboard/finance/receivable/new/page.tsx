@@ -12,10 +12,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Save } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { createAccount } from "@/lib/supabase/accounts"
-import { getClients } from "@/lib/supabase/people"
-import { getServices } from "@/lib/supabase/services"
 import { useToast } from "@/hooks/use-toast"
+import { getClientsClient } from "@/lib/supabase/client/people.client"
+import { getServicesClient } from "@/lib/supabase/client/service.client"
+import { createAccountClient } from "@/lib/supabase/client/account.client"
 
 export default function NewReceivablePage() {
   const router = useRouter()
@@ -28,7 +28,7 @@ export default function NewReceivablePage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [clientsData, servicesData] = await Promise.all([getClients(), getServices()])
+        const [clientsData, servicesData] = await Promise.all([getClientsClient(), getServicesClient()])
 
         setClients(clientsData || [])
         setServices(servicesData || [])
@@ -54,7 +54,7 @@ export default function NewReceivablePage() {
     try {
       const formData = new FormData(e.target as HTMLFormElement)
 
-      const accountData = {
+      const accountData: any = {
         type: "receivable" as const,
         client_id: formData.get("client") as string,
         service_id: (formData.get("service") as string) || null,
@@ -70,7 +70,7 @@ export default function NewReceivablePage() {
         observations: (formData.get("observations") as string) || null,
       }
 
-      await createAccount(accountData)
+      await createAccountClient(accountData)
 
       toast({
         title: "Sucesso",

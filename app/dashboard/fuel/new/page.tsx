@@ -12,10 +12,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Save } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { createFuelRecord } from "@/lib/supabase/maintenance-fuel"
-import { getVehicles } from "@/lib/supabase/vehicles"
-import { getEmployees } from "@/lib/supabase/people"
 import { useToast } from "@/hooks/use-toast"
+import { getVehiclesClient } from "@/lib/supabase/client/vehicle.client"
+import { getEmployeesClient } from "@/lib/supabase/client/people.client"
+import { createFuelClient } from "@/lib/supabase/client/fuel.client"
 
 export default function NewFuelPage() {
   const router = useRouter()
@@ -28,7 +28,7 @@ export default function NewFuelPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [vehiclesData, employeesData] = await Promise.all([getVehicles(), getEmployees()])
+        const [vehiclesData, employeesData] = await Promise.all([getVehiclesClient(), getEmployeesClient()])
 
         setVehicles(vehiclesData || [])
         // Filter only drivers (motoristas)
@@ -55,7 +55,7 @@ export default function NewFuelPage() {
     try {
       const formData = new FormData(e.target as HTMLFormElement)
 
-      const fuelData = {
+      const fuelData: any = {
         vehicle_id: formData.get("vehicle") as string,
         driver_id: formData.get("driver") as string,
         date: formData.get("date") as string,
@@ -69,7 +69,7 @@ export default function NewFuelPage() {
         observations: (formData.get("observations") as string) || null,
       }
 
-      await createFuelRecord(fuelData)
+      await createFuelClient(fuelData)
 
       toast({
         title: "Sucesso",

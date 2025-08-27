@@ -12,9 +12,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Save } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { createMaintenanceRecord } from "@/lib/supabase/maintenance-fuel"
-import { getVehicles } from "@/lib/supabase/vehicles"
 import { useToast } from "@/hooks/use-toast"
+import { getVehiclesClient } from "@/lib/supabase/client/vehicle.client"
+import { createMaintenanceClient } from "@/lib/supabase/client/maintenance.client"
 
 export default function NewMaintenancePage() {
   const router = useRouter()
@@ -26,7 +26,7 @@ export default function NewMaintenancePage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const vehiclesData = await getVehicles()
+        const vehiclesData = await getVehiclesClient()
         setVehicles(vehiclesData || [])
       } catch (error) {
         console.error("Error loading vehicles:", error)
@@ -50,7 +50,7 @@ export default function NewMaintenancePage() {
     try {
       const formData = new FormData(e.target as HTMLFormElement)
 
-      const maintenanceData = {
+      const maintenanceData: any = {
         vehicle_id: formData.get("vehicle") as string,
         type: formData.get("type") as string,
         date: formData.get("date") as string,
@@ -66,7 +66,7 @@ export default function NewMaintenancePage() {
         observations: (formData.get("observations") as string) || null,
       }
 
-      await createMaintenanceRecord(maintenanceData)
+      await createMaintenanceClient(maintenanceData)
 
       toast({
         title: "Sucesso",

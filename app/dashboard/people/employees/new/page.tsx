@@ -12,8 +12,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ArrowLeft, Save } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { createEmployee } from "@/lib/supabase/people"
 import { toast } from "sonner"
+import { createEmployeeClient } from "@/lib/supabase/client/people.client"
 
 export default function NewEmployeePage() {
   const router = useRouter()
@@ -27,7 +27,7 @@ export default function NewEmployeePage() {
       const formData = new FormData(e.target as HTMLFormElement)
 
       // Collect form data
-      const employeeData = {
+      const employeeData: any = {
         name: formData.get("name") as string,
         document: formData.get("cpf") as string,
         email: (formData.get("email") as string) || "",
@@ -47,7 +47,7 @@ export default function NewEmployeePage() {
 
       console.log("[v0] Tentando cadastrar funcionário:", employeeData)
 
-      await createEmployee(employeeData)
+      await createEmployeeClient(employeeData)
 
       console.log("[v0] Funcionário cadastrado com sucesso")
       toast.success("Funcionário cadastrado com sucesso!")

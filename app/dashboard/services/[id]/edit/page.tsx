@@ -13,10 +13,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Save, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { getServiceClient, updateServiceClient, type Service } from "@/lib/supabase/services"
-import { getClientsClient, type Client } from "@/lib/supabase/people"
-import { getVehiclesClient, type Vehicle } from "@/lib/supabase/vehicles"
-import { getEmployeesClient, type Employee } from "@/lib/supabase/people"
+import { Service } from "@/lib/supabase/types/services.type"
+import { Client, Employee } from "@/lib/supabase/types/people.types"
+import { Vehicle } from "@/lib/supabase/types/vehicle.type"
+import { getServiceClient, updateServiceClient } from "@/lib/supabase/client/service.client"
+import { getClientsClient, getEmployeesClient } from "@/lib/supabase/client/people.client"
+import { getVehiclesClient } from "@/lib/supabase/client/vehicle.client"
 
 interface EditServicePageProps {
   params: {
@@ -28,7 +30,7 @@ export default function EditServicePage({ params }: EditServicePageProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [service, setService] = useState<Service | null>(null)
+  const [service, setService] = useState<any | null>(null)
   const [clients, setClients] = useState<Client[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])

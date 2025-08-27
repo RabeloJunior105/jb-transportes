@@ -13,10 +13,9 @@ import { ArrowLeft, Save } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
-import { getSuppliers } from "@/lib/supabase/server/people.server"
-import { getVehicles } from "@/lib/supabase/server/vehicle.server"
-import { createAccount } from "@/lib/supabase/server/account.server"
-import { CreateAccountData } from "@/lib/supabase/types/accounts.type"
+import { getSuppliersClient } from "@/lib/supabase/client/people.client"
+import { getVehiclesClient } from "@/lib/supabase/client/vehicle.client"
+import { createAccountClient } from "@/lib/supabase/client/account.client"
 
 export default function NewPayablePage() {
   const router = useRouter()
@@ -29,7 +28,7 @@ export default function NewPayablePage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [suppliersData, vehiclesData] = await Promise.all([getSuppliers(), getVehicles()])
+        const [suppliersData, vehiclesData] = await Promise.all([getSuppliersClient(), getVehiclesClient()])
 
         setSuppliers(suppliersData || [])
         setVehicles(vehiclesData || [])
@@ -71,7 +70,7 @@ export default function NewPayablePage() {
         observations: (formData.get("observations") as string) || null,
       }
 
-      await createAccount(accountData)
+      await createAccountClient(accountData)
 
       toast({
         title: "Sucesso",

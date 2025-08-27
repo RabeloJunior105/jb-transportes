@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Save, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { getVehicleClient, updateVehicleClient, type Vehicle } from "@/lib/supabase/vehicles"
+import { Vehicle } from "@/lib/supabase/types/vehicle.type"
+import { getVehicleClient, updateVehicleClient } from "@/lib/supabase/client/vehicle.client"
 
 interface EditVehiclePageProps {
   params: {
