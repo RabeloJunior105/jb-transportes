@@ -15,6 +15,8 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 
+import { Toaster } from 'sonner';
+
 // Função simples para capitalizar as palavras
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
@@ -56,6 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </BreadcrumbList>
           </Breadcrumb>
         </header>
+        <Toaster />
         {children}
       </SidebarInset>
     </SidebarProvider>

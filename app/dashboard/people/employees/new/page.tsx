@@ -11,33 +11,40 @@ import { employeeFormConfig } from "../config";
 const Employees = createCrudClient<Employee, CreateEmployee>({
   table: "employees",
   select: "*",
-  defaultOrder: { column: "created_at", ascending: false },
+  defaultOrder: { column: "updated_at", ascending: false },
 });
 
-const schema = z.object({
-  // pessoais
+export const schema = z.object({
   name: z.string().min(2, "Nome muito curto"),
-  cpf: z.string().min(11, "CPF inválido"), // ajuste a validação conforme precisar
+  cpf: z.string().min(11, "CPF inválido"),
   phone: z.string().min(8, "Telefone inválido"),
-  email: z.string().email().optional().or(z.literal("")),
+  email: z.string().email("E-mail inválido").optional().or(z.literal("")),
 
-  // endereço (opcionais)
   address: z.string().optional(),
   city: z.string().optional(),
-  state: z.enum(["SP", "RJ", "MG", "RS", "PR", "SC"]).optional(),
+  state: z.enum(["SP", "RJ", "MG", "RS", "PR", "SC"], {
+    errorMap: () => ({ message: "Selecione um estado válido (SP, RJ, MG, RS, PR ou SC)" }),
+  }).optional(),
   cep: z.string().optional(),
 
-  // profissionais
-  position: z.enum(["motorista", "ajudante", "mecanico", "administrativo", "gerente", "diretor"]),
-  hire_date: z.string().min(1, "Data de admissão é obrigatória"),
-  salary: z.coerce.number().optional(),
-  status: z.enum(["active", "vacation", "inactive", "demitido"]),
+  position: z.enum(["motorista", "ajudante", "mecanico", "administrativo", "gerente", "diretor"], {
+    errorMap: () => ({ message: "Selecione um cargo válido" }),
+  }),
+  hire_date: z.string().min(1, "Data de admissão é obrigatória"), // obrigatório: mantém string
 
-  // documentos
+  salary: z.coerce.number().optional(),
+  status: z.enum(["active", "vacation", "inactive", "demitido"], {
+    errorMap: () => ({ message: "Selecione um status válido" }),
+  }),
+
   cnh_number: z.string().optional(),
-  cnh_category: z.enum(["A", "B", "C", "D", "E"]).optional(),
-  cnh_expiry: z.string().optional(),
+  cnh_category: z.enum(["A", "B", "C", "D", "E"], {
+    errorMap: () => ({ message: "Categoria de CNH inválida (A, B, C, D ou E)" }),
+  }).optional(),
+  cnh_expiry: z.string().optional().nullable(),
 });
+
+export type EmployeeFormCpfCep = z.infer<typeof schema>;
 
 export default function NewEmployeePage() {
   return (
@@ -46,7 +53,7 @@ export default function NewEmployeePage() {
       initialValues={{ status: "active" }}
       schema={schema}
       typeHints={{
-        hire_date: "date",     // transforma para ISO antes de enviar
+        hire_date: "date",
         cnh_expiry: "date",
         salary: "number",
       }}

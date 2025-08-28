@@ -64,6 +64,10 @@ const data = {
           title: "Manutenção",
           url: "/dashboard/fleet/maintenance",
         },
+        {
+          title: "Combustivel",
+          url: "/dashboard/fleet/fuel",
+        },
       ],
     },
     {
@@ -98,11 +102,6 @@ const data = {
           url: "/dashboard/suppliers",
         },
       ],
-    },
-    {
-      title: "Combustivel",
-      url: "/dashboard/fuel",
-      icon: Fuel,
     },
   ],
   navSecondary: [
