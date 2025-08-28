@@ -7,7 +7,7 @@ export const vehiclesFormConfig = {
         {
             title: "Identificação (Sistema)",
             description: "Campos controlados pela aplicação",
-            hidden: false,
+            hidden: true,
             fields: [
                 { name: "id", label: "ID", type: "hidden" as const, hidden: false },
                 { name: "user_id", label: "User ID", type: "hidden" as const, hidden: false },

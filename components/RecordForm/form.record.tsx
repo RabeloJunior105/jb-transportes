@@ -1,7 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z, ZodSchema } from "zod";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Save, ArrowLeft, ChevronsUpDown, Check, Loader2 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,30 +18,74 @@ import {
     CardTitle,
     CardDescription,
 } from "@/components/ui/card";
-import { Save, ArrowLeft } from "lucide-react";
-import Link from "next/link";
-import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 import { SelectField } from "@/lib/supabase-crud/forms/SelectField";
+
+// ✨ imports p/ combobox remoto
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from "@/components/ui/command";
+
+// ---------------- Utils ----------------
+const UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function clsx(...parts: Array<string | false | undefined>) {
+    return parts.filter(Boolean).join(" ");
+}
+
+function useDebounced<T>(value: T, delay = 300) {
+    const [v, setV] = useState(value);
+    useEffect(() => {
+        const t = setTimeout(() => setV(value), delay);
+        return () => clearTimeout(t);
+    }, [value, delay]);
+    return v;
+}
 
 // ---------------- Types ----------------
 export type Option = { label: string; value: string };
 
+type BaseFieldType =
+    | "text"
+    | "email"
+    | "number"
+    | "date"
+    | "textarea"
+    | "select"
+    | "hidden";
+
+// 👇 NOVO tipo p/ relacionamentos remotos
+type RemoteSelectType = "remote-select";
+
+export type FieldType = BaseFieldType | RemoteSelectType;
+
+export type RemoteSource = {
+    table: string;
+    valueKey: string;   // ex: "id"
+    labelKey: string;   // ex: "plate" | "name"
+    searchKeys?: string[]; // ex: ["plate","brand","model"] ou ["name","document"]
+    userScoped?: boolean;  // se true, aplica eq("user_id", auth.uid())
+    extraFilter?: Record<string, string | number | boolean | null>;
+    pageSize?: number;     // default 10
+};
+
 export type FieldConfig = {
     name: string;
     label: string;
-    type: "text" | "email" | "number" | "date" | "textarea" | "select" | "hidden";
+    type: FieldType;
     placeholder?: string;
     required?: boolean;
     disabled?: boolean;
     hidden?: boolean;
-    options?: ReadonlyArray<Option>;
+    options?: ReadonlyArray<Option>; // still used for "select" estático
+    // 👇 só para "remote-select"
+    remote?: RemoteSource;
 };
 
 export type GroupConfig = {
     title: string;
     description?: string;
-    hidden?: boolean; // oculta card inteiro
+    hidden?: boolean;
     fields: ReadonlyArray<FieldConfig>;
 };
 
@@ -74,9 +123,6 @@ function safeToIso(input: string): string | undefined {
     const d = new Date(normalized);
     return isNaN(d.getTime()) ? undefined : d.toISOString();
 }
-
-const UUID_RE =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function parseTypes(
     raw: Record<string, FormDataEntryValue>,
@@ -133,6 +179,218 @@ function zodErrorsToMap(err: any): FormErrors {
     return map;
 }
 
+// ---------------- RemoteSelect embutido ----------------
+type RSProps = {
+    name: string;
+    defaultValue?: string | null;
+    placeholder?: string;
+    required?: boolean;
+    disabled?: boolean;
+    error?: string;
+    source: RemoteSource;
+};
+
+function RemoteSelectField({
+    name,
+    defaultValue,
+    placeholder = "Selecione...",
+    required,
+    disabled,
+    error,
+    source,
+}: RSProps) {
+    const sb = useMemo(() => createBrowserClient(), []);
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState("");
+    const debounced = useDebounced(query, 300);
+
+    const [options, setOptions] = useState<Option[]>([]);
+    const [selected, setSelected] = useState<Option | null>(null);
+    const [page, setPage] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [booting, setBooting] = useState(true);
+
+    const pageSize = source.pageSize ?? 10;
+
+    // carrega o label do defaultValue (edição)
+    useEffect(() => {
+        let ignore = false;
+        (async () => {
+            if (!defaultValue) {
+                setBooting(false);
+                return;
+            }
+            try {
+                const sel = `${source.valueKey}, ${source.labelKey}`;
+                let q = sb.from(source.table).select(sel).eq(source.valueKey, defaultValue).limit(1);
+
+                if (source.userScoped) {
+                    const { data: { user } } = await sb.auth.getUser();
+                    if (user) q = q.eq("user_id", user.id);
+                }
+                if (source.extraFilter) {
+                    Object.entries(source.extraFilter).forEach(([k, v]) => {
+                        q = q.eq(k, v as any);
+                    });
+                }
+
+                const { data, error } = await q.single();
+                if (!ignore && !error && data) {
+                    const typedData = data as Record<string, any>;
+                    const opt = { value: String(typedData[source.valueKey]), label: String(typedData[source.labelKey]) };
+                    setSelected(opt);
+                    setOptions([opt]); // garante exibição
+                }
+            } catch (e) {
+                console.warn("RemoteSelect default label fetch error:", e);
+            } finally {
+                if (!ignore) setBooting(false);
+            }
+        })();
+        return () => { ignore = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [defaultValue, source.table, source.valueKey, source.labelKey]);
+
+    // busca pagina de opções
+    async function fetchPage(reset = false) {
+        setLoading(true);
+        try {
+            const from = reset ? 0 : page * pageSize;
+            const to = from + pageSize - 1;
+
+            const sel = `${source.valueKey}, ${source.labelKey}`;
+            let q = sb.from(source.table).select(sel).order(source.labelKey, { ascending: true }).range(from, to);
+
+            if (source.userScoped) {
+                const { data: { user } } = await sb.auth.getUser();
+                if (user) q = q.eq("user_id", user.id);
+            }
+            if (source.extraFilter) {
+                Object.entries(source.extraFilter).forEach(([k, v]) => {
+                    q = q.eq(k, v as any);
+                });
+            }
+            const term = debounced.trim();
+            if (term && source.searchKeys?.length) {
+                const ors = source.searchKeys.map((k) => `${k}.ilike.%${term}%`).join(",");
+                q = q.or(ors);
+            }
+
+            const { data, error, count } = await q;
+            if (error) throw error;
+
+            const newOpts: Option[] = (data ?? []).map((r: any) => ({
+                value: String(r[source.valueKey]),
+                label: String(r[source.labelKey]),
+            }));
+
+            if (reset) {
+                setOptions(newOpts);
+                setPage(1);
+            } else {
+                setOptions((prev) => [...prev, ...newOpts.filter(o => !prev.some(p => p.value === o.value))]);
+                setPage((p) => p + 1);
+            }
+
+            // se veio menos que o pageSize, não tem mais
+            setHasMore((data?.length ?? 0) >= pageSize);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    // sempre que mudar termo, reseta e busca
+    useEffect(() => {
+        if (!open) return;
+        setPage(0);
+        fetchPage(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [debounced, open, source.table, source.labelKey]);
+
+    return (
+        <div>
+            {/* input escondido para o <form> capturar */}
+            <input type="hidden" name={name} value={selected?.value ?? ""} />
+
+            <Popover open={open} onOpenChange={setOpen}>
+                <PopoverTrigger asChild>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={open}
+                        className={clsx("w-full justify-between", error && "border-destructive")}
+                        disabled={disabled}
+                    >
+                        {booting ? (
+                            <span className="inline-flex items-center gap-2 text-muted-foreground">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Carregando...
+                            </span>
+                        ) : selected ? (
+                            selected.label
+                        ) : (
+                            <span className="text-muted-foreground">{placeholder}</span>
+                        )}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                    <Command shouldFilter={false}>
+                        <CommandInput
+                            placeholder="Buscar..."
+                            value={query}
+                            onValueChange={setQuery}
+                            disabled={disabled}
+                        />
+                        <CommandList className="max-h-64 overflow-auto">
+                            <CommandEmpty>
+                                {loading ? "Carregando..." : "Nada encontrado"}
+                            </CommandEmpty>
+
+                            {/* opções */}
+                            {options.map((opt) => {
+                                const isSel = selected?.value === opt.value;
+                                return (
+                                    <CommandItem
+                                        key={opt.value}
+                                        onSelect={() => {
+                                            setSelected(opt);
+                                            setOpen(false);
+                                        }}
+                                    >
+                                        <Check className={clsx("mr-2 h-4 w-4", isSel ? "opacity-100" : "opacity-0")} />
+                                        {opt.label}
+                                    </CommandItem>
+                                );
+                            })}
+
+                            {/* carregar mais */}
+                            {hasMore && (
+                                <div className="p-2">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="w-full"
+                                        onClick={() => fetchPage(false)}
+                                        disabled={loading}
+                                    >
+                                        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Carregar mais
+                                    </Button>
+                                </div>
+                            )}
+                        </CommandList>
+                    </Command>
+                </PopoverContent>
+            </Popover>
+
+            {error && <p className="text-sm text-destructive mt-1">{error}</p>}
+        </div>
+    );
+}
+
 // ---------------- Component ----------------
 export default function RecordForm({
     config,
@@ -158,7 +416,7 @@ export default function RecordForm({
         const formEl = e.target as HTMLFormElement;
         const formData = new FormData(formEl);
 
-        // coleta valores
+        // coleta valores (atenção: remote-select injeta <input hidden name=...>)
         const raw: Record<string, any> = {};
         fieldList.forEach((f) => {
             raw[f.name] = formData.get(f.name);
@@ -231,7 +489,7 @@ export default function RecordForm({
                                 {group.fields.map((field) => {
                                     const defaultValue = initialValues[field.name] ?? "";
 
-                                    // hidden field: só envia quando tem valor (evita "" em uuid etc.)
+                                    // hidden
                                     if (field.hidden || field.type === "hidden") {
                                         const val =
                                             field.type === "date" && defaultValue
@@ -266,9 +524,7 @@ export default function RecordForm({
                                                         aria-invalid={!!err}
                                                         className={err ? "border-destructive" : undefined}
                                                     />
-                                                    {err && (
-                                                        <p className="text-sm text-destructive">{err}</p>
-                                                    )}
+                                                    {err && <p className="text-sm text-destructive">{err}</p>}
                                                 </>
                                             ) : field.type === "select" ? (
                                                 <SelectField
@@ -280,6 +536,18 @@ export default function RecordForm({
                                                     placeholder={field.placeholder}
                                                     error={err}
                                                 />
+                                            ) : field.type === "remote-select" && field.remote ? (
+                                                <RemoteSelectField
+                                                    name={field.name}
+                                                    defaultValue={
+                                                        defaultValue ? String(defaultValue) : undefined
+                                                    }
+                                                    placeholder={field.placeholder}
+                                                    required={field.required}
+                                                    disabled={field.disabled}
+                                                    error={err}
+                                                    source={field.remote}
+                                                />
                                             ) : (
                                                 <>
                                                     <Input
@@ -288,7 +556,7 @@ export default function RecordForm({
                                                         type={field.type}
                                                         defaultValue={
                                                             field.type === "date" && defaultValue
-                                                                ? String(defaultValue).slice(0, 10) // yyyy-mm-dd
+                                                                ? String(defaultValue).slice(0, 10)
                                                                 : defaultValue
                                                         }
                                                         placeholder={field.placeholder}
@@ -297,9 +565,7 @@ export default function RecordForm({
                                                         aria-invalid={!!err}
                                                         className={err ? "border-destructive" : undefined}
                                                     />
-                                                    {err && (
-                                                        <p className="text-sm text-destructive">{err}</p>
-                                                    )}
+                                                    {err && <p className="text-sm text-destructive">{err}</p>}
                                                 </>
                                             )}
                                         </div>

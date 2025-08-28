@@ -29,8 +29,6 @@ export default function NewVehiclePage() {
         ...vehicleTypeHints,
       }}
       onSubmit={async (values) => {
-        console.log("Submitting vehicle:", values);
-        // RLS: exige user_id = auth.uid()
         delete values.id 
         const sb = createBrowserClient();
         const { data: { user }, error: userErr } = await sb.auth.getUser();

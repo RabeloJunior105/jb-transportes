@@ -1,152 +1,117 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import {
-  Search,
-  Plus,
-  MoreHorizontal,
-  Eye,
-  Edit,
-  Trash2,
-  Filter,
-  Fuel,
-  TrendingUp,
-  BarChart3,
-  Calendar,
-  Loader2,
-} from "lucide-react"
-import Link from "next/link"
-import { toast } from "sonner"
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+import { Fuel, Eye, Edit, Trash2, Plus, MapPin } from "lucide-react";
 
-import { FuelRecord } from "@/lib/supabase/types/maintence.type"
-import { calculateConsumption, deleteFuelClient, getFuelClient, getFuelTypeLabel } from "@/lib/supabase/client/fuel.client"
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { RecordList } from "@/components/ListForm/record-list";
+import { SummaryCards } from "@/components/SummaryCards/summary-cards";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
-const getFuelTypeBadge = (tipo: string) => {
-  const colors = {
-    diesel: "bg-blue-100 text-blue-800 border-blue-200",
-    gasoline: "bg-green-100 text-green-800 border-green-200",
-    ethanol: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    cng: "bg-purple-100 text-purple-800 border-purple-200",
-  }
+import { makeFetchDataClient } from "@/lib/utils/makeFetchDataClient";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
+import { FUEL_TABLE, Fuel as FuelType } from "./config";
+import { AmountsCell, VehicleCell } from "@/lib/helpers/currency";
 
-  return (
-    <Badge variant="outline" className={colors[tipo as keyof typeof colors] || "bg-gray-100 text-gray-800"}>
-      {getFuelTypeLabel(tipo)}
-    </Badge>
-  )
+// ====== Tipos com relacionamentos ======
+type FuelRow = FuelType & {
+  vehicle?: { id: string; plate: string; brand?: string | null; model?: string | null } | null;
+  driver?: { id: string; name: string | null } | null;      // ou "employee"
+  supplier?: { id: string; name: string | null } | null;
+};
+
+// --------- Fetch List com embeds ----------
+const fetchFuels = makeFetchDataClient<FuelRow>({
+  table: FUEL_TABLE,
+  // se os FKs estão certinhos, isso funciona direto (LEFT JOIN):
+  // alias amigável: vehicle:vehicles, driver:employees, supplier:suppliers
+  select: `
+    id, fuel_date, fuel_type, liters, price_per_liter, total_cost, location,
+    vehicle:vehicles ( id, plate, brand, model ),
+    driver:employees ( id, name ),
+    supplier:suppliers ( id, name )
+  `,
+  defaultOrder: { column: "fuel_date", ascending: false },
+  searchFields: ["location"], // buscar por nome do relacionado só via VIEW (ver nota abaixo)
+  filterMap: {
+    fuel_type: "fuel_type",
+    vehicle_id: "vehicle_id",
+    supplier_id: "supplier_id",
+  },
+});
+
+// --------- Delete ----------
+async function deleteFuelClient(id: string) {
+  const sb = createBrowserClient();
+  const { error } = await sb.from(FUEL_TABLE).delete().eq("id", id);
+  if (error) throw error;
 }
 
-const getConsumptionColor = (consumo: number, tipoCombustivel: string) => {
-  // Diesel: bom < 3.5, médio 3.5-4.5, ruim > 4.5
-  // Gasolina: bom < 9, médio 9-12, ruim > 12
-  if (tipoCombustivel === "diesel") {
-    if (consumo < 3.5) return "text-chart-1"
-    if (consumo <= 4.5) return "text-chart-2"
-    return "text-destructive"
-  } else {
-    if (consumo < 9) return "text-chart-1"
-    if (consumo <= 12) return "text-chart-2"
-    return "text-destructive"
-  }
+// --------- Summary ----------
+async function getSummaryFuels() {
+  const sb = createBrowserClient();
+  const { data, error } = await sb
+    .from(FUEL_TABLE)
+    .select("liters,total_cost,fuel_type");
+  if (error) throw error;
+
+  const rows = data ?? [];
+  const totalRecords = rows.length;
+  const totalLiters = rows.reduce((acc, r) => acc + (r.liters ?? 0), 0);
+  const totalCost = rows.reduce((acc, r) => acc + (r.total_cost ?? 0), 0);
+  const dieselCount = rows.filter((r) => r.fuel_type === "diesel").length;
+
+  return { totalRecords, totalLiters, totalCost, dieselCount };
 }
 
 export default function FuelPage() {
-  const [fuelRecords, setFuelRecords] = useState<FuelRecord[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [vehicleFilter, setVehicleFilter] = useState("all")
-  const [fuelTypeFilter, setFuelTypeFilter] = useState("all")
-  const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 10
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [target, setTarget] = useState<FuelRow | null>(null);
 
-  useEffect(() => {
-    loadFuelRecords()
-  }, [])
+  const openDeleteModal = (row: FuelRow) => {
+    setTarget(row);
+    setConfirmOpen(true);
+  };
 
-  const loadFuelRecords = async () => {
+  const handleConfirmDelete = async () => {
+    if (!target) return;
+    setDeleting(true);
     try {
-      setLoading(true)
-      const data = await getFuelClient()
-      setFuelRecords(data)
-    } catch (error) {
-      console.error("Error loading fuel records:", error)
-      toast.error("Erro ao carregar registros de combustível")
+      await deleteFuelClient(target.id);
+      toast.success("Abastecimento excluído com sucesso");
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      console.error(e);
+      toast.error("Erro ao excluir abastecimento");
     } finally {
-      setLoading(false)
+      setDeleting(false);
+      setConfirmOpen(false);
+      setTarget(null);
     }
-  }
+  };
 
-  const handleDeleteRecord = async (id: string) => {
-    if (!confirm("Tem certeza que deseja excluir este registro?")) return
-
-    try {
-      await deleteFuelClient(id)
-      setFuelRecords(fuelRecords.filter((record) => record.id !== id))
-      toast.success("Registro excluído com sucesso")
-    } catch (error) {
-      console.error("Error deleting fuel record:", error)
-      toast.error("Erro ao excluir registro")
-    }
-  }
-
-  const filteredRecords = fuelRecords.filter((record) => {
-    const matchesSearch =
-      record.vehicles?.plate?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      record.suppliers?.name?.toLowerCase().includes(searchTerm.toLowerCase())
-
-    const matchesVehicle = vehicleFilter === "all" || record.vehicles?.plate === vehicleFilter
-    const matchesFuelType = fuelTypeFilter === "all" || record.fuel_type === fuelTypeFilter
-
-    return matchesSearch && matchesVehicle && matchesFuelType
-  })
-
-  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const paginatedRecords = filteredRecords.slice(startIndex, startIndex + itemsPerPage)
-
-  const totalLiters = fuelRecords.reduce((sum, r) => sum + r.liters, 0)
-  const totalCost = fuelRecords.reduce((sum, r) => sum + r.total_cost, 0)
-  const averageConsumption =
-    fuelRecords.length > 0
-      ? fuelRecords.reduce((sum, r, index, arr) => {
-        if (index === 0) return sum
-        const prevRecord = arr[index - 1]
-        const consumption = calculateConsumption(prevRecord.mileage, r.mileage, r.liters)
-        return sum + consumption
-      }, 0) / Math.max(fuelRecords.length - 1, 1)
-      : 0
-  const totalRefuels = fuelRecords.length
-
-  const uniqueVehicles = Array.from(new Set(fuelRecords.map((r) => r.vehicles?.plate).filter(Boolean)))
-
-  if (loading) {
-    return (
-      <div className="flex-1 space-y-6 p-6">
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <span className="ml-2">Carregando registros de combustível...</span>
-        </div>
-      </div>
-    )
-  }
+  const currency = useMemo(
+    () => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }),
+    []
+  );
 
   return (
-    <div className="flex-1 space-y-6 p-6">
+    <div className="flex-1 p-4 md:p-8 pt-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Controle de Combustível</h1>
-          <p className="text-muted-foreground">Gerencie todos os abastecimentos da frota</p>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Fuel className="h-7 w-7" />
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Abastecimentos</h1>
+            <p className="text-muted-foreground">Registros de abastecimento da frota</p>
+          </div>
         </div>
-        <Link href="/dashboard/fuel/new">
+        <Link href="/dashboard/fleet/fuel/new">
           <Button className="bg-primary hover:bg-primary/90">
             <Plus className="h-4 w-4 mr-2" />
             Novo Abastecimento
@@ -154,247 +119,164 @@ export default function FuelPage() {
         </Link>
       </div>
 
-      {/* Fuel Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Litros</CardTitle>
-            <Fuel className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalLiters.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}L
-            </div>
-          </CardContent>
-        </Card>
+      {/* Summary */}
+      <SummaryCards
+        fetchData={getSummaryFuels}
+        cards={[
+          { title: "Registros", icon: <Fuel />, valueKey: "totalRecords" },
+          { title: "Total de Litros", icon: <Fuel />, valueKey: "totalLiters", colorClass: "text-chart-1" },
+          { title: "Custo Total", icon: <Fuel />, valueKey: "totalCost", colorClass: "text-chart-2" },
+          { title: "Diesel (Qtd)", icon: <Fuel />, valueKey: "dieselCount", colorClass: "text-chart-3" },
+        ]}
+      />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Custo Total</CardTitle>
-            <TrendingUp className="h-4 w-4 text-chart-1" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-chart-1">
-              R$ {totalCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-            </div>
-          </CardContent>
-        </Card>
+      {/* List */}
+      <RecordList<FuelRow>
+        key={refreshKey}
+        title="Lista de Abastecimentos"
+        description="Histórico de abastecimentos"
+        itemsPerPage={10}
+        fetchData={fetchFuels}
+        filters={[
+          {
+            name: "fuel_type",
+            label: "Combustível",
+            options: [
+              { label: "Diesel", value: "diesel" },
+              { label: "Gasolina", value: "gasolina" },
+              { label: "Etanol", value: "etanol" },
+              { label: "Flex", value: "flex" },
+              { label: "GNV", value: "gnv" },
+              { label: "Elétrico", value: "eletrico" },
+            ],
+          },
+        ]}
+        fields={[
+          {
+            name: "fuel_date",
+            label: "Data",
+            type: "text",
+            render: (iso) =>
+              iso ? new Date(iso as string).toLocaleDateString("pt-BR") : "-",
+          },
+          {
+            // VEÍCULO: marca/modelo em cima e placa embaixo
+            name: "vehicle",
+            label: "Veículo",
+            type: "text",
+            render: (v: any, _row: any) => {
+              const brandModel = [v.brand, v.model].filter(Boolean).join(" ");
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Consumo Médio</CardTitle>
-            <BarChart3 className="h-4 w-4 text-chart-3" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-chart-3">{averageConsumption.toFixed(1)} km/L</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Abastecimentos</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalRefuels}</div>
-            <p className="text-xs text-muted-foreground">Total</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters and Search */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filtros e Busca
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por veículo ou local..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div className="w-full sm:w-48">
-              <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Veículo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os Veículos</SelectItem>
-                  {uniqueVehicles.map((plate) => (
-                    <SelectItem key={plate} value={plate!}>
-                      {plate}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-full sm:w-48">
-              <Select value={fuelTypeFilter} onValueChange={setFuelTypeFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Combustível" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os Tipos</SelectItem>
-                  <SelectItem value="diesel">Diesel S10</SelectItem>
-                  <SelectItem value="gasoline">Gasolina</SelectItem>
-                  <SelectItem value="ethanol">Etanol</SelectItem>
-                  <SelectItem value="cng">GNV</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Fuel Records Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Histórico de Abastecimentos</CardTitle>
-          <CardDescription>{filteredRecords.length} abastecimento(s) encontrado(s)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Veículo</TableHead>
-                  <TableHead>Local</TableHead>
-                  <TableHead>Combustível</TableHead>
-                  <TableHead>Litros</TableHead>
-                  <TableHead>Valor Total</TableHead>
-                  <TableHead>Quilometragem</TableHead>
-                  <TableHead className="w-[100px]">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedRecords.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      Nenhum registro encontrado
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedRecords.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div>{new Date(record.fuel_date).toLocaleDateString("pt-BR")}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {record.vehicles?.plate || "N/A"}
-                        <div className="text-xs text-muted-foreground">
-                          {record.vehicles?.brand} {record.vehicles?.model}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="max-w-[150px] truncate" title={record.location}>
-                          {record.location}
-                        </div>
-                        {record.suppliers?.name && (
-                          <div className="text-xs text-muted-foreground">{record.suppliers.name}</div>
-                        )}
-                      </TableCell>
-                      <TableCell>{getFuelTypeBadge(record.fuel_type)}</TableCell>
-                      <TableCell>
-                        <div className="font-medium">{record.liters.toFixed(1)}L</div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">
-                          R$ {record.total_cost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                        </div>
-                        <div className="text-xs text-muted-foreground">R$ {record.price_per_liter.toFixed(2)}/L</div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">{record.mileage.toLocaleString()} km</div>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <span className="sr-only">Abrir menu</span>
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
-                              <Eye className="mr-2 h-4 w-4" />
-                              Visualizar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => handleDeleteRecord(record.id)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Excluir
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between space-x-2 py-4">
-              <div className="text-sm text-muted-foreground">
-                Mostrando {startIndex + 1} a {Math.min(startIndex + itemsPerPage, filteredRecords.length)} de{" "}
-                {filteredRecords.length} resultados
-              </div>
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
+              return (
+                <Link href={`/dashboard/fleet/vehicles/${v.id}`} className="block hover:underline">
+                  <div className="font-medium">
+                    {brandModel || v.plate}
+                  </div>
+                  <div className="text-xs text-muted-foreground tracking-wide">
+                    {v.plate}
+                  </div>
+                </Link>
+              )
+            },
+          },
+          {
+            name: "fuel_type",
+            label: "Comb.",
+            type: "badge",
+            render: (value) => {
+              const map: Record<string, { label: string; className: string }> = {
+                diesel: { label: "Diesel", className: "bg-emerald-500 text-white" },
+                gasolina: { label: "Gasolina", className: "bg-rose-600 text-white" },
+                etanol: { label: "Etanol", className: "bg-lime-500 text-white" },
+                flex: { label: "Flex", className: "bg-sky-500 text-white" },
+                gnv: { label: "GNV", className: "bg-amber-500 text-white" },
+                eletrico: { label: "Elétrico", className: "bg-indigo-500 text-white" },
+              };
+              const m = map[String(value)] ?? { label: String(value), className: "border" };
+              return <Badge className={m.className}>{m.label}</Badge>;
+            },
+          },
+          {
+            // MONTANTE: Litros • R$/L + linha do Total
+            name: "amounts",
+            label: "Consumo",
+            type: "text",
+            render: (_v, row) => {
+              return (
+                <AmountsCell row={row} currency={currency} />
+              )
+            },
+          },
+          {
+            // NOVO: Motorista (employee)
+            name: "driver",
+            label: "Motorista",
+            type: "text",
+            render: (_v, row) =>
+              row?.driver ? (
+                <Link
+                  href={`/dashboard/people/employees/${row.driver.id}`}
+                  className="hover:underline"
                 >
-                  Anterior
-                </Button>
-                <div className="flex items-center space-x-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <Button
-                      key={page}
-                      variant={currentPage === page ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setCurrentPage(page)}
-                      className="w-8 h-8 p-0"
-                    >
-                      {page}
-                    </Button>
-                  ))}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
+                  {row.driver.name || "—"}
+                </Link>
+              ) : (
+                "—"
+              ),
+          },
+          {
+            // NOVO: Fornecedor
+            name: "supplier",
+            label: "Fornecedor",
+            type: "text",
+            render: (_v, row) =>
+              row?.supplier ? (
+                <Link
+                  href={`/dashboard/suppliers/${row.supplier.id}`}
+                  className="hover:underline"
                 >
-                  Próximo
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  {row.supplier.name || "—"}
+                </Link>
+              ) : (
+                "—"
+              ),
+          },
+          {
+            name: "location",
+            label: "Local",
+            type: "text",
+            render: (loc) => (
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                {loc || "-"}
+              </span>
+            ),
+          },
+        ]}
+        actions={[
+          { label: "Visualizar", icon: <Eye className="h-4 w-4" />, href: (row) => `/dashboard/fleet/fuel/${row.id}` },
+          { label: "Editar", icon: <Edit className="h-4 w-4" />, href: (row) => `/dashboard/fleet/fuel/${row.id}/edit` },
+          {
+            label: "Excluir",
+            icon: <Trash2 className="h-4 w-4" />,
+            color: "destructive",
+            onClick: (row) => openDeleteModal(row),
+          },
+        ]}
+      />
+
+      {/* Modal de confirmação */}
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        loading={deleting}
+        title="Excluir abastecimento"
+        description={<>Essa ação não pode ser desfeita.</>}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        destructive
+        onConfirm={handleConfirmDelete}
+      />
     </div>
-  )
+  );
 }

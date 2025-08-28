@@ -1,146 +1,185 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Search, Plus, MoreHorizontal, Eye, Edit, Trash2, Filter, Wrench, Calendar, DollarSign } from "lucide-react"
-import Link from "next/link"
+import { useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+import {
+  Eye,
+  Edit,
+  Trash2,
+  Plus,
+  CheckCircle,
+  AlertTriangle,
+  CreditCard,
+  Wrench,
+} from "lucide-react";
 
-// Mock data for maintenance records
-const mockMaintenance = [
-  {
-    id: "MNT-001",
-    veiculo: "ABC-1234",
-    tipo: "Preventiva",
-    descricao: "Troca de óleo e filtros",
-    custo: 450.0,
-    dataManutencao: "2024-01-15",
-    quilometragem: 85000,
-    status: "Concluída",
-    oficina: "Oficina Central",
-    proximaRevisao: "2024-04-15",
-  },
-  {
-    id: "MNT-002",
-    veiculo: "DEF-5678",
-    tipo: "Corretiva",
-    descricao: "Reparo no sistema de freios",
-    custo: 1200.0,
-    dataManutencao: "2024-01-20",
-    quilometragem: 120000,
-    status: "Em Andamento",
-    oficina: "Freios & Cia",
-    proximaRevisao: "2024-07-20",
-  },
-  {
-    id: "MNT-003",
-    veiculo: "GHI-9012",
-    tipo: "Preventiva",
-    descricao: "Revisão geral dos 45.000 km",
-    custo: 800.0,
-    dataManutencao: "2024-01-10",
-    quilometragem: 45000,
-    status: "Concluída",
-    oficina: "Oficina Central",
-    proximaRevisao: "2024-07-10",
-  },
-  {
-    id: "MNT-004",
-    veiculo: "JKL-3456",
-    tipo: "Preventiva",
-    descricao: "Troca de pneus e alinhamento",
-    custo: 950.0,
-    dataManutencao: "2024-01-05",
-    quilometragem: 25000,
-    status: "Concluída",
-    oficina: "Pneus Express",
-    proximaRevisao: "2024-10-05",
-  },
-  {
-    id: "MNT-005",
-    veiculo: "MNO-7890",
-    tipo: "Corretiva",
-    descricao: "Reparo no sistema elétrico",
-    custo: 650.0,
-    dataManutencao: "2024-01-25",
-    quilometragem: 95000,
-    status: "Agendada",
-    oficina: "Elétrica Auto",
-    proximaRevisao: "2024-04-25",
-  },
-]
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { RecordList } from "@/components/ListForm/record-list";
+import { SummaryCards } from "@/components/SummaryCards/summary-cards";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
+import { makeFetchDataClient } from "@/lib/utils/makeFetchDataClient";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+
+/** ================== SELECT (com embeds) ================== */
+const MAINTENANCE_SELECT = `
+  id, user_id, vehicle_id, supplier_id,
+  maintenance_type, description, cost,
+  maintenance_date, next_maintenance_date,
+  mileage, status, created_at, updated_at,
+  vehicle:vehicles ( id, plate, brand, model ),
+  supplier:suppliers ( id, name )
+`;
+
+/** ================== TIPOS ================== */
+type VehicleRef = {
+  id: string;
+  plate: string;
+  brand?: string | null;
+  model?: string | null;
+} | null;
+
+type SupplierRef = {
+  id: string;
+  name: string | null;
+} | null;
+
+export type MaintenanceRow = {
+  id: string;
+  user_id: string;
+  vehicle_id: string | null;
+  supplier_id: string | null;
+
+  maintenance_type: string;                // ex.: "preventive" | "corrective" | "inspection"
+  description: string | null;
+  cost: number;
+  maintenance_date: string;               // ISO
+  next_maintenance_date: string | null;   // ISO
+  mileage: number | null;
+  status: string;                         // ex.: "pending" | "in_progress" | "completed" | "canceled"
+
+  created_at: string;
+  updated_at: string;
+
+  // embeds (podem vir como objeto ou array dependendo do FK name)
+  vehicle: VehicleRef | VehicleRef[] | null;
+  supplier: SupplierRef | SupplierRef[] | null;
+};
+
+/** ================== HELPERS ================== */
+const currencyBRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const fmtDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
+const one = <T,>(v: any): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
 
 const getStatusBadge = (status: string) => {
-  switch (status) {
-    case "Concluída":
-      return <Badge className="bg-chart-1 text-white">Concluída</Badge>
-    case "Em Andamento":
-      return <Badge className="bg-chart-2 text-accent-foreground">Em Andamento</Badge>
-    case "Agendada":
-      return <Badge className="bg-chart-3 text-accent-foreground">Agendada</Badge>
-    default:
-      return <Badge variant="outline">{status}</Badge>
-  }
+  const map: Record<string, { label: string; className: string }> = {
+    pending:      { label: "Pendente",     className: "border" },
+    in_progress:  { label: "Em andamento", className: "bg-blue-500 text-white" },
+    completed:    { label: "Concluída",    className: "bg-green-600 text-white" },
+    canceled:     { label: "Cancelada",    className: "bg-destructive text-destructive-foreground" },
+  };
+  const it = map[status] ?? { label: status, className: "border" };
+  return <Badge className={it.className}>{it.label}</Badge>;
+};
+
+const getTypeBadge = (type: string) => {
+  const map: Record<string, { label: string; className: string }> = {
+    preventive: { label: "Preventiva", className: "bg-sky-500 text-white" },
+    corrective: { label: "Corretiva",  className: "bg-amber-500 text-white" },
+    inspection: { label: "Inspeção",   className: "bg-emerald-500 text-white" },
+  };
+  const it = map[type] ?? { label: type, className: "border" };
+  return <Badge className={it.className}>{it.label}</Badge>;
+};
+
+/** ================== SUMMARY ================== */
+async function getSummaryMaintenance() {
+  const sb = createBrowserClient();
+  const { data, error } = await sb
+    .from("maintenance")
+    .select("status, cost, maintenance_date");
+  if (error) throw error;
+
+  const rows = data ?? [];
+  const total = rows.length;
+  const pending = rows.filter((r: any) => r.status === "pending").length;
+  const inProgress = rows.filter((r: any) => r.status === "in_progress").length;
+  const completed = rows.filter((r: any) => r.status === "completed").length;
+  const totalCost = rows.reduce((acc: number, r: any) => acc + Number(r.cost ?? 0), 0);
+
+  return {
+    totalMaintenance: total,
+    pendingMaintenance: pending,
+    inProgressMaintenance: inProgress,
+    completedMaintenance: completed,
+    totalCost,
+  };
 }
 
-const getTypeBadge = (tipo: string) => {
-  switch (tipo) {
-    case "Preventiva":
-      return (
-        <Badge variant="outline" className="border-chart-1 text-chart-1">
-          Preventiva
-        </Badge>
-      )
-    case "Corretiva":
-      return (
-        <Badge variant="outline" className="border-chart-4 text-chart-4">
-          Corretiva
-        </Badge>
-      )
-    default:
-      return <Badge variant="outline">{tipo}</Badge>
-  }
+/** ================== FETCH VIA makeFetchDataClient ================== */
+const fetchMaintenance = makeFetchDataClient<MaintenanceRow>({
+  table: "maintenance",
+  select: MAINTENANCE_SELECT,
+  defaultOrder: { column: "maintenance_date", ascending: false },
+  // sem VIEW, busca server-side só em colunas da própria tabela
+  searchFields: ["description"],
+  filterMap: {
+    status: "status",
+    maintenance_type: "maintenance_type",
+    vehicle_id: "vehicle_id",
+    supplier_id: "supplier_id",
+  },
+});
+
+/** ================== DELETE ================== */
+async function deleteMaintenanceClient(id: string) {
+  const sb = createBrowserClient();
+  const { error } = await sb.from("maintenance").delete().eq("id", id);
+  if (error) throw error;
 }
 
+/** ================== PAGE ================== */
 export default function MaintenancePage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [typeFilter, setTypeFilter] = useState("all")
-  const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 10
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const filteredMaintenance = mockMaintenance.filter((maintenance) => {
-    const matchesSearch =
-      maintenance.veiculo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      maintenance.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      maintenance.oficina.toLowerCase().includes(searchTerm.toLowerCase())
+  // estado do ConfirmDialog
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [target, setTarget] = useState<MaintenanceRow | null>(null);
 
-    const matchesStatus = statusFilter === "all" || maintenance.status === statusFilter
-    const matchesType = typeFilter === "all" || maintenance.tipo === typeFilter
+  const openDeleteModal = (row: MaintenanceRow) => {
+    setTarget(row);
+    setConfirmOpen(true);
+  };
 
-    return matchesSearch && matchesStatus && matchesType
-  })
-
-  const totalPages = Math.ceil(filteredMaintenance.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const paginatedMaintenance = filteredMaintenance.slice(startIndex, startIndex + itemsPerPage)
-
-  const totalCost = mockMaintenance.reduce((sum, m) => sum + m.custo, 0)
-  const preventiveCost = mockMaintenance.filter((m) => m.tipo === "Preventiva").reduce((sum, m) => sum + m.custo, 0)
-  const correctiveCost = mockMaintenance.filter((m) => m.tipo === "Corretiva").reduce((sum, m) => sum + m.custo, 0)
+  const handleConfirmDelete = async () => {
+    if (!target) return;
+    setDeleting(true);
+    try {
+      await deleteMaintenanceClient(target.id);
+      toast.success("Manutenção excluída com sucesso");
+      setRefreshKey((k) => k + 1);
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro ao excluir manutenção");
+    } finally {
+      setDeleting(false);
+      setConfirmOpen(false);
+      setTarget(null);
+    }
+  };
 
   return (
-    <div className="flex-1 space-y-6 p-6">
+    <div className="flex-1 p-4 md:p-8 pt-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Manutenção da Frota</h1>
-          <p className="text-muted-foreground">Gerencie todas as manutenções dos veículos</p>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Wrench className="h-7 w-7" />
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Manutenções</h1>
+            <p className="text-muted-foreground">Gerencie o histórico de manutenção da frota</p>
+          </div>
         </div>
         <Link href="/dashboard/fleet/maintenance/new">
           <Button className="bg-primary hover:bg-primary/90">
@@ -150,225 +189,127 @@ export default function MaintenancePage() {
         </Link>
       </div>
 
-      {/* Maintenance Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Manutenções</CardTitle>
-            <Wrench className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{mockMaintenance.length}</div>
-          </CardContent>
-        </Card>
+      {/* Summary Cards */}
+      <SummaryCards
+        fetchData={getSummaryMaintenance}
+        cards={[
+          { title: "Total de Manutenções", icon: <Wrench />, valueKey: "totalMaintenance" },
+          { title: "Pendentes", icon: <AlertTriangle />, valueKey: "pendingMaintenance", colorClass: "text-chart-2" },
+          { title: "Em Andamento", icon: <CheckCircle />, valueKey: "inProgressMaintenance", colorClass: "text-chart-1" },
+          { title: "Concluídas", icon: <CheckCircle />, valueKey: "completedMaintenance", colorClass: "text-chart-3" },
+          // { title: "Custo Total", icon: <CreditCard />, valueKey: "totalCost", format: (v) => currencyBRL.format(Number(v || 0)) },
+        ]}
+      />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Custo Total</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              R$ {totalCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-            </div>
-          </CardContent>
-        </Card>
+      {/* RecordList */}
+      <RecordList<MaintenanceRow>
+        key={refreshKey}
+        title="Lista de Manutenções"
+        description="Registros cadastrados"
+        itemsPerPage={10}
+        fetchData={fetchMaintenance}
+        filters={[
+          {
+            name: "status",
+            label: "Status",
+            options: [
+              { label: "Pendente", value: "pending" },
+              { label: "Em andamento", value: "in_progress" },
+              { label: "Concluída", value: "completed" },
+              { label: "Cancelada", value: "canceled" },
+            ],
+          },
+          {
+            name: "maintenance_type",
+            label: "Tipo",
+            options: [
+              { label: "Preventiva", value: "preventive" },
+              { label: "Corretiva",  value: "corrective" },
+              { label: "Inspeção",   value: "inspection" },
+            ],
+          },
+        ]}
+        fields={[
+          {
+            name: "vehicle",
+            label: "Veículo",
+            type: "text",
+            render: (_: any, row) => {
+              const v = one<VehicleRef>(row.vehicle);
+              if (!v) return "—";
+              const title = [v?.brand, v?.model].filter(Boolean).join(" ") || v?.plate;
+              return (
+                <Link href={`/dashboard/fleet/vehicles/${v.id}`} className="block hover:underline">
+                  <div className="font-medium">{title}</div>
+                  <div className="text-xs text-muted-foreground tracking-wide">{v.plate}</div>
+                </Link>
+              );
+            },
+          },
+          {
+            name: "maintenance_type",
+            label: "Tipo",
+            type: "badge",
+            render: (val) => getTypeBadge(String(val)),
+          },
+          {
+            name: "status",
+            label: "Status",
+            type: "badge",
+            render: (val) => getStatusBadge(String(val)),
+          },
+          {
+            name: "cost",
+            label: "Custo",
+            type: "text",
+            render: (v) => currencyBRL.format(Number(v ?? 0)),
+          },
+          {
+            name: "supplier",
+            label: "Fornecedor",
+            type: "text",
+            render: (_: any, row) => {
+              const s = one<SupplierRef>(row.supplier);
+              return s ? (
+                <Link href={`/dashboard/suppliers/${s.id}`} className="hover:underline">
+                  {s.name || "—"}
+                </Link>
+              ) : (
+                "—"
+              );
+            },
+          },
+          {
+            name: "maintenance_date",
+            label: "Data",
+            type: "text",
+            render: (iso) => fmtDate(String(iso)),
+          },
+        ]}
+        actions={[
+          { label: "Visualizar", icon: <Eye className="h-4 w-4" />, href: (row) => `/dashboard/fleet/maintenance/${row.id}` },
+          { label: "Editar", icon: <Edit className="h-4 w-4" />, href: (row) => `/dashboard/fleet/maintenance/${row.id}/edit` },
+          {
+            label: "Excluir",
+            icon: <Trash2 className="h-4 w-4" />,
+            color: "destructive",
+            onClick: (row) => openDeleteModal(row),
+          },
+        ]}
+      />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Preventiva</CardTitle>
-            <div className="h-2 w-2 bg-chart-1 rounded-full"></div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-chart-1">
-              R$ {preventiveCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Corretiva</CardTitle>
-            <div className="h-2 w-2 bg-chart-4 rounded-full"></div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-chart-4">
-              R$ {correctiveCost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters and Search */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filtros e Busca
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por veículo, descrição ou oficina..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div className="w-full sm:w-48">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os Status</SelectItem>
-                  <SelectItem value="Concluída">Concluída</SelectItem>
-                  <SelectItem value="Em Andamento">Em Andamento</SelectItem>
-                  <SelectItem value="Agendada">Agendada</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-full sm:w-48">
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os Tipos</SelectItem>
-                  <SelectItem value="Preventiva">Preventiva</SelectItem>
-                  <SelectItem value="Corretiva">Corretiva</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Maintenance Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Histórico de Manutenções</CardTitle>
-          <CardDescription>{filteredMaintenance.length} manutenção(ões) encontrada(s)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Veículo</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Custo</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-[100px]">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedMaintenance.map((maintenance) => (
-                  <TableRow key={maintenance.id}>
-                    <TableCell className="font-medium">{maintenance.id}</TableCell>
-                    <TableCell>{maintenance.veiculo}</TableCell>
-                    <TableCell>{getTypeBadge(maintenance.tipo)}</TableCell>
-                    <TableCell>
-                      <div className="max-w-[200px] truncate" title={maintenance.descricao}>
-                        {maintenance.descricao}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        <div>{new Date(maintenance.dataManutencao).toLocaleDateString("pt-BR")}</div>
-                        <div className="text-muted-foreground">{maintenance.quilometragem.toLocaleString()} km</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium">
-                        R$ {maintenance.custo.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                      </div>
-                    </TableCell>
-                    <TableCell>{getStatusBadge(maintenance.status)}</TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Abrir menu</span>
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
-                            <Eye className="mr-2 h-4 w-4" />
-                            Visualizar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Calendar className="mr-2 h-4 w-4" />
-                            Reagendar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive">
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Excluir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between space-x-2 py-4">
-              <div className="text-sm text-muted-foreground">
-                Mostrando {startIndex + 1} a {Math.min(startIndex + itemsPerPage, filteredMaintenance.length)} de{" "}
-                {filteredMaintenance.length} resultados
-              </div>
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                >
-                  Anterior
-                </Button>
-                <div className="flex items-center space-x-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <Button
-                      key={page}
-                      variant={currentPage === page ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setCurrentPage(page)}
-                      className="w-8 h-8 p-0"
-                    >
-                      {page}
-                    </Button>
-                  ))}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                >
-                  Próximo
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Modal de confirmação */}
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        loading={deleting}
+        title="Excluir manutenção"
+        description={<>Tem certeza que deseja excluir este registro? Essa ação não pode ser desfeita.</>}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        destructive
+        onConfirm={handleConfirmDelete}
+      />
     </div>
-  )
+  );
 }

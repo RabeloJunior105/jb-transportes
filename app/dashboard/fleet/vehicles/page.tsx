@@ -170,7 +170,7 @@ export default function VehiclesPage() {
         ]}
         actions={[
           { label: "Visualizar", icon: <Eye className="h-4 w-4" />, href: (row) => `/dashboard/fleet/vehicles/${row.id}` },
-          { label: "Editar", icon: <Edit className="h-4 w-4" />, href: (row) => `/dashboard/fleet/vehicles/${row.id}` },
+          { label: "Editar", icon: <Edit className="h-4 w-4" />, href: (row) => `/dashboard/fleet/vehicles/${row.id}/edit` },
           {
             label: "Excluir",
             icon: <Trash2 className="h-4 w-4" />,
