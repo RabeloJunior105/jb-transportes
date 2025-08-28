@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { z, ZodSchema } from "zod"; // use se quiser; pode manter como peer opcional
+import { z, ZodSchema } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,19 +19,13 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { SelectField } from "@/lib/supabase-crud/forms/SelectField";
 
+// ---------------- Types ----------------
 export type Option = { label: string; value: string };
 
 export type FieldConfig = {
     name: string;
     label: string;
-    type:
-    | "text"
-    | "email"
-    | "number"
-    | "date"
-    | "textarea"
-    | "select"
-    | "hidden";
+    type: "text" | "email" | "number" | "date" | "textarea" | "select" | "hidden";
     placeholder?: string;
     required?: boolean;
     disabled?: boolean;
@@ -42,9 +36,11 @@ export type FieldConfig = {
 export type GroupConfig = {
     title: string;
     description?: string;
-    hidden?: boolean; // ← oculta card inteiro
+    hidden?: boolean; // oculta card inteiro
     fields: ReadonlyArray<FieldConfig>;
 };
+
+type TypeHint = "number" | "date" | "string" | "boolean" | "uuid";
 
 export interface RecordFormProps {
     config: {
@@ -55,36 +51,73 @@ export interface RecordFormProps {
     initialValues?: Record<string, any>;
     onSubmit: (values: Record<string, any>) => Promise<void>;
     backHref?: string;
-    schema?: ZodSchema<any>; // ← agora Zod “oficial”
-    typeHints?: Record<string, "number" | "date" | "string" | "boolean">;
+    schema?: ZodSchema<any>;
+    typeHints?: Record<string, TypeHint>;
 }
 
-// ---------- Helpers ----------
+// ---------------- Helpers ----------------
+function safeToIso(input: string): string | undefined {
+    const s = input.trim();
+    if (!s) return undefined;
+
+    // YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const d = new Date(`${s}T00:00:00Z`);
+        return isNaN(d.getTime()) ? undefined : d.toISOString();
+    }
+
+    // normaliza " " -> "T"
+    let normalized = s.replace(" ", "T");
+    // adiciona Z se não houver timezone explícito
+    if (!/[zZ]|[+\-]\d{2}:?\d{2}$/.test(normalized)) normalized += "Z";
+
+    const d = new Date(normalized);
+    return isNaN(d.getTime()) ? undefined : d.toISOString();
+}
+
+const UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function parseTypes(
     raw: Record<string, FormDataEntryValue>,
-    typeHints?: Record<string, "number" | "date" | "string" | "boolean">
+    typeHints?: Record<string, TypeHint>
 ) {
     const out: Record<string, any> = {};
     for (const [k, v] of Object.entries(raw)) {
         const hint = typeHints?.[k];
         const str = typeof v === "string" ? v : String(v);
+        const trimmed = str.trim();
 
         if (hint === "number") {
-            // número vazio → undefined (deixa o zod optional passar)
-            out[k] = str.trim() === "" ? undefined : Number(str);
-        } else if (hint === "date") {
-            // data vazia → undefined; preenchida → ISO string
-            out[k] = str.trim() === "" ? undefined : new Date(str).toISOString();
-        } else if (hint === "boolean") {
-            out[k] = str === "true" || str === "on" ? true : str === "false" ? false : Boolean(str);
-        } else {
-            // string normal mantém como veio
-            out[k] = str;
+            out[k] = trimmed === "" ? undefined : Number(trimmed);
+            continue;
         }
+
+        if (hint === "date") {
+            out[k] = trimmed === "" ? undefined : safeToIso(trimmed) ?? undefined;
+            continue;
+        }
+
+        if (hint === "boolean") {
+            out[k] =
+                trimmed === "true" || trimmed === "on"
+                    ? true
+                    : trimmed === "false"
+                        ? false
+                        : Boolean(trimmed);
+            continue;
+        }
+
+        if (hint === "uuid") {
+            out[k] = trimmed === "" ? undefined : UUID_RE.test(trimmed) ? trimmed : undefined;
+            continue;
+        }
+
+        // default string
+        out[k] = str;
     }
     return out;
 }
-
 
 type FormErrors = Record<string, string | undefined>;
 
@@ -100,7 +133,7 @@ function zodErrorsToMap(err: any): FormErrors {
     return map;
 }
 
-// ---------- Component ----------
+// ---------------- Component ----------------
 export default function RecordForm({
     config,
     initialValues = {},
@@ -113,7 +146,6 @@ export default function RecordForm({
     const [errors, setErrors] = useState<FormErrors>({});
     const router = useRouter();
 
-    // lista de campos (para coleta rápida e para saber o que validar/exibir)
     const fieldList = useMemo(
         () => config.groups.flatMap((g) => g.fields),
         [config.groups]
@@ -121,27 +153,26 @@ export default function RecordForm({
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setErrors({}); // reset
+        setErrors({});
 
         const formEl = e.target as HTMLFormElement;
         const formData = new FormData(formEl);
 
-        // Coleta valores
+        // coleta valores
         const raw: Record<string, any> = {};
         fieldList.forEach((f) => {
             raw[f.name] = formData.get(f.name);
         });
 
-        // Tipagem
+        // tipagem
         const parsed = parseTypes(raw, typeHints);
 
-        // Validação (se tiver schema)
+        // validação
         if (schema) {
             const res = schema.safeParse(parsed);
             if (!res.success) {
                 const map = zodErrorsToMap(res.error);
                 setErrors(map);
-                // feedback mais amigável
                 const firstMsg =
                     res.error.issues?.[0]?.message || "Dados inválidos. Verifique os campos.";
                 toast.error(firstMsg);
@@ -200,18 +231,19 @@ export default function RecordForm({
                                 {group.fields.map((field) => {
                                     const defaultValue = initialValues[field.name] ?? "";
 
-                                    // se hidden, apenas mantém o valor no submit
+                                    // hidden field: só envia quando tem valor (evita "" em uuid etc.)
                                     if (field.hidden || field.type === "hidden") {
+                                        const val =
+                                            field.type === "date" && defaultValue
+                                                ? String(defaultValue).slice(0, 10)
+                                                : String(defaultValue ?? "");
+                                        if (val.trim() === "") return null;
                                         return (
                                             <input
                                                 key={field.name}
                                                 type="hidden"
                                                 name={field.name}
-                                                defaultValue={
-                                                    field.type === "date" && defaultValue
-                                                        ? String(defaultValue).slice(0, 10)
-                                                        : String(defaultValue ?? "")
-                                                }
+                                                defaultValue={val}
                                             />
                                         );
                                     }

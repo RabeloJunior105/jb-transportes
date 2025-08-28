@@ -1,20 +1,34 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+import {
+  Eye,
+  Edit,
+  Trash2,
+  Plus,
+  CheckCircle,
+  AlertTriangle,
+  CreditCard,
+  Users,
+} from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import Link from "next/link";
-import { Plus, CheckCircle, AlertTriangle, CreditCard, Eye, Edit, Trash2, Users } from "lucide-react";
-import { toast } from "sonner";
-
-import { Employee } from "@/lib/supabase/types/people.types";
-import { isLicenseExpired, isLicenseExpiring, getSummaryEmployees } from "@/lib/supabase/client/people.client";
 import { RecordList } from "@/components/ListForm/record-list";
 import { SummaryCards } from "@/components/SummaryCards/summary-cards";
+import { Employee } from "@/lib/supabase/types/people.types";
+import {
+  isLicenseExpired,
+  isLicenseExpiring,
+  getSummaryEmployees,
+} from "@/lib/supabase/client/people.client";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import { makeFetchDataClient } from "@/lib/utils/makeFetchDataClient";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
-const EMPLOYEE_SELECT = "*"; // ajuste se tiver relações (ex: "*, department(name)")
+const EMPLOYEE_SELECT = "*";
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -36,19 +50,16 @@ const getStatusBadge = (status: string) => {
   }
 };
 
-// Adaptador: busca, filtros, ordenação e paginação direto no Supabase
+// Busca/paginação/filters direto no Supabase
 const fetchEmployees = makeFetchDataClient<Employee>({
   table: "employees",
   select: EMPLOYEE_SELECT,
   defaultOrder: { column: "created_at", ascending: false },
-  searchFields: ["name", "email", "phone", "document"], // campos para ilike OR
-  filterMap: {
-    status: "status",
-    position: "position",
-  },
+  searchFields: ["name", "email", "phone", "document"],
+  filterMap: { status: "status", position: "position" },
 });
 
-// Delete direto no Supabase (client-side). Se preferir, use server action ou soft-delete.
+// Delete client-side
 async function deleteEmployeeClient(id: string) {
   const sb = createBrowserClient();
   const { error } = await sb.from("employees").delete().eq("id", id);
@@ -56,18 +67,32 @@ async function deleteEmployeeClient(id: string) {
 }
 
 export default function EmployeesPage() {
-  const [_, setRefreshKey] = useState(0); // simples gatilho para recarregar RecordList se precisar
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const handleDelete = async (employee: Employee) => {
-    if (!confirm(`Deseja realmente excluir ${employee.name}?`)) return;
+  // estado do ConfirmDialog
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [target, setTarget] = useState<Employee | null>(null);
+
+  const openDeleteModal = (row: Employee) => {
+    setTarget(row);
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!target) return;
+    setDeleting(true);
     try {
-      await deleteEmployeeClient(employee.id);
-      toast.success("Funcionário excluído com sucesso");
-      // dica: se quiser forçar reload, altere algum state que você passe pro RecordList (ex.: key)
-      setRefreshKey((k) => k + 1);
+      await deleteEmployeeClient(target.id);
+      toast.success(`Funcionário ${target.name} excluído com sucesso`);
+      setRefreshKey((k) => k + 1);          // ← força recarregar a grid
     } catch (error) {
       console.error(error);
       toast.error("Erro ao excluir funcionário");
+    } finally {
+      setDeleting(false);
+      setConfirmOpen(false);
+      setTarget(null);
     }
   };
 
@@ -87,7 +112,7 @@ export default function EmployeesPage() {
         </Link>
       </div>
 
-      {/* Summary Cards (mantidos) */}
+      {/* Summary Cards */}
       <SummaryCards
         fetchData={getSummaryEmployees}
         cards={[
@@ -98,10 +123,11 @@ export default function EmployeesPage() {
         ]}
       />
 
-      {/* RecordList — agora usando fetchEmployees (Supabase faz o trabalho pesado) */}
+      {/* RecordList */}
       <RecordList<Employee>
+        key={refreshKey}
         title="Lista de Funcionários"
-        description={`Funcionários encontrados`}
+        description="Funcionários encontrados"
         itemsPerPage={10}
         fetchData={fetchEmployees}
         filters={[
@@ -135,7 +161,9 @@ export default function EmployeesPage() {
               <div>
                 {row.name}
                 <br />
-                <span className="text-xs text-muted-foreground">{(row as any).document}</span>
+                <span className="text-xs text-muted-foreground">
+                  {(row as any).document}
+                </span>
               </div>
             ),
           },
@@ -187,8 +215,31 @@ export default function EmployeesPage() {
         actions={[
           { label: "Visualizar", icon: <Eye className="h-4 w-4" />, href: (row) => `/dashboard/people/employees/${row.id}` },
           { label: "Editar", icon: <Edit className="h-4 w-4" />, href: (row) => `/dashboard/people/employees/${row.id}` },
-          { label: "Excluir", icon: <Trash2 className="h-4 w-4" />, color: "destructive", onClick: handleDelete },
+          {
+            label: "Excluir",
+            icon: <Trash2 className="h-4 w-4" />,
+            color: "destructive",
+            onClick: (row) => openDeleteModal(row), // ← abre modal
+          },
         ]}
+      />
+
+      {/* Modal de confirmação */}
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        loading={deleting}
+        title="Excluir funcionário"
+        description={
+          <>
+            Tem certeza que deseja excluir{" "}
+            <strong>{target?.name}</strong>? Essa ação não pode ser desfeita.
+          </>
+        }
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        destructive
+        onConfirm={handleConfirmDelete}
       />
     </div>
   );

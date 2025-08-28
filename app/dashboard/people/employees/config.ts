@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 // Lista completa de UFs BR (opcional; pode reduzir se quiser espelhar só o CSV)
 const UF = [
     "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT",
@@ -84,3 +86,33 @@ export const employeeFormConfig = {
         },
     ],
 } as const;
+
+export const schema = z.object({
+    name: z.string().min(2, "Nome muito curto"),
+    cpf: z.string().min(11, "CPF inválido"),
+    phone: z.string().min(8, "Telefone inválido"),
+    email: z.string().email("E-mail inválido").optional().or(z.literal("")),
+
+    address: z.string().optional(),
+    city: z.string().optional(),
+    state: z.enum(["SP", "RJ", "MG", "RS", "PR", "SC"], {
+        errorMap: () => ({ message: "Selecione um estado válido (SP, RJ, MG, RS, PR ou SC)" }),
+    }).optional(),
+    cep: z.string().optional(),
+
+    position: z.enum(["motorista", "ajudante", "mecanico", "administrativo", "gerente", "diretor"], {
+        errorMap: () => ({ message: "Selecione um cargo válido" }),
+    }),
+    hire_date: z.string().min(1, "Data de admissão é obrigatória"), // obrigatório: mantém string
+
+    salary: z.coerce.number().optional(),
+    status: z.enum(["active", "vacation", "inactive", "demitido"], {
+        errorMap: () => ({ message: "Selecione um status válido" }),
+    }),
+
+    cnh_number: z.string().optional(),
+    cnh_category: z.enum(["A", "B", "C", "D", "E"], {
+        errorMap: () => ({ message: "Categoria de CNH inválida (A, B, C, D ou E)" }),
+    }).optional(),
+    cnh_expiry: z.string().optional().nullable(),
+});

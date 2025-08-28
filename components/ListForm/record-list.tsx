@@ -114,8 +114,11 @@ export function RecordList<T extends { id: string }>({
 
                 {/* Tabela */}
                 {loading ? (
-                    <div className="flex justify-center items-center py-10">
-                        <Loader2 className="animate-spin h-6 w-6 mr-2" /> Carregando...
+                    <div className="flex-1 space-y-6 p-6">
+                        <div className="flex items-center justify-center h-64">
+                            <Loader2 className="h-8 w-8 animate-spin" />
+                            <span className="ml-2">Carregando dados...</span>
+                        </div>
                     </div>
                 ) : rows.length === 0 ? (
                     <div className="text-center py-10 text-muted-foreground">Nenhum registro encontrado</div>
