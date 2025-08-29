@@ -35,7 +35,7 @@ export default function FuelDetailPage() {
             const sb = createBrowserClient();
             const { data, error } = await sb.from(FUEL_TABLE).select("*").eq("id", id).single();
             if (error) {
-                console.error(error);
+                console.log(error);
                 toast.error("Erro ao carregar abastecimento");
             } else {
                 setRecord(data as FuelType);

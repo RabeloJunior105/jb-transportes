@@ -79,7 +79,7 @@ export default function VehiclesPage() {
       toast.success(`Veículo ${target.plate} excluído com sucesso`);
       setRefreshKey((k) => k + 1); // força recarregar a grid
     } catch (e) {
-      console.error(e);
+      console.log(e);
       toast.error("Erro ao excluir veículo");
     } finally {
       setDeleting(false);

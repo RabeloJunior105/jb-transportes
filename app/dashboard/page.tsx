@@ -1,224 +1,367 @@
 "use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useEffect, useMemo, useState } from "react"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { DollarSign, AlertTriangle, TrendingUp, Calendar, Fuel, Wrench, FileText } from "lucide-react"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Progress } from "@/components/ui/progress"
+import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  DollarSign,
+  AlertTriangle,
+  TrendingUp,
+  Calendar,
+  Fuel,
+  Wrench,
+  FileText,
+  Truck,
+  Route,
+  RefreshCw,
+} from "lucide-react"
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  Legend,
+  Cell,
+} from "recharts"
+import { createClient } from "@supabase/supabase-js"
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string
+const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
+const supabase = createClient(supabaseUrl, supabaseAnon)
+
+function currency(v: number) {
+  return (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+const PRIMARY = "hsl(var(--primary))"
+const ACCENT = "hsl(var(--accent))"
 
 export default function DashboardPage() {
+  const [loading, setLoading] = useState(true)
+  const [kpis, setKpis] = useState<any>(null)
+  const [receitaVsCusto, setReceitaVsCusto] = useState<any[]>([])
+  const [aging, setAging] = useState<any[]>([])
+  const [combSemanas, setCombSemanas] = useState<any[]>([])
+  const [manutencoes, setManutencoes] = useState<any[]>([])
+  const [rotas, setRotas] = useState<any[]>([])
+  const [utilizacaoFrota, setUtilizacaoFrota] = useState<any[]>([])
+
+  async function loadData() {
+    setLoading(true)
+    const [kpiRes, receitaRes, agingRes, combRes, manRes, rotasRes, utilRes] = await Promise.all([
+      supabase.from("vw_dash_kpis").select("*"),
+      supabase.from("vw_dash_receita_vs_custo").select("*"),
+      supabase.from("vw_dash_aging").select("*"),
+      supabase.from("vw_dash_combustivel_semana").select("*"),
+      supabase.from("vw_dash_manutencoes").select("*"),
+      supabase.from("vw_dash_rotas").select("*"),
+      supabase.from("vw_dash_utilizacao_frota").select("*"),
+    ])
+    setKpis(kpiRes.data?.[0] || null)
+    setReceitaVsCusto(receitaRes.data || [])
+    setAging(agingRes.data || [])
+    setCombSemanas(combRes.data || [])
+    setManutencoes(manRes.data || [])
+    setRotas(rotasRes.data || [])
+    setUtilizacaoFrota(utilRes.data || [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const metaPct = useMemo(() => {
+    if (!kpis) return 0
+    const denom = kpis?.receita_meta || 0
+    return denom === 0 ? 0 : Math.min(100, (kpis?.receita_mensal / denom) * 100)
+  }, [kpis])
+
   return (
     <div className="flex-1 space-y-6 p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
           <p className="text-muted-foreground">Visão geral das operações da JB Transportes</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ThemeToggle />
           <Badge variant="outline" className="text-xs">
             <Calendar className="h-3 w-3 mr-1" />
             Hoje: {new Date().toLocaleDateString("pt-BR")}
           </Badge>
+          <Button variant="outline" size="sm" className="gap-1" onClick={loadData}>
+            <RefreshCw className="h-4 w-4" /> Atualizar
+          </Button>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="border-l-4 border-l-primary">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Receita Mensal</CardTitle>
             <DollarSign className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">R$ 145.230</div>
-            <p className="text-xs text-muted-foreground">
-              <TrendingUp className="h-3 w-3 inline mr-1 text-chart-1" />
-              +8% vs mês anterior (R$ 134.472)
-            </p>
-            <div className="mt-2 text-xs text-muted-foreground">Meta: R$ 150.000 (97% atingido)</div>
+            {loading ? <Skeleton className="h-7 w-32" /> : <div className="text-2xl font-bold text-primary">{currency(kpis?.receita_mensal || 0)}</div>}
+            <div className="mt-3">
+              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                <span>Meta: {currency(kpis?.receita_meta || 0)}</span>
+                <span>{metaPct.toFixed(0)}%</span>
+              </div>
+              <Progress value={metaPct} />
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-chart-2">
+        <Card className="border-l-4 border-l-primary/60">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Margem de Lucro</CardTitle>
-            <TrendingUp className="h-4 w-4 text-chart-2" />
+            <TrendingUp className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-chart-2">23.5%</div>
-            <p className="text-xs text-muted-foreground">Lucro líquido: R$ 34.109</p>
-            <div className="mt-2 text-xs text-muted-foreground">Média do setor: 18-25%</div>
+            {loading ? <Skeleton className="h-7 w-16" /> : <div className="text-2xl font-bold text-primary">{(kpis?.margem_lucro || 0).toFixed(1)}%</div>}
+            <p className="text-xs text-muted-foreground">Lucro líquido: {currency(kpis?.lucro_liquido || 0)}</p>
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-chart-3">
+        <Card className="border-l-4 border-l-accent">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Custos Operacionais</CardTitle>
-            <Fuel className="h-4 w-4 text-chart-3" />
+            <Fuel className="h-4 w-4 text-accent" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-chart-3">R$ 89.450</div>
-            <p className="text-xs text-muted-foreground">Combustível: R$ 45.230 (50.6%)</p>
-            <div className="mt-2 text-xs text-muted-foreground">Manutenção: R$ 18.900 (21.1%)</div>
+            {loading ? <Skeleton className="h-7 w-32" /> : <div className="text-2xl font-bold text-accent">{currency(kpis?.custos_operacionais || 0)}</div>}
+            <p className="text-xs text-muted-foreground">Combustível: {currency(kpis?.combustivel || 0)}</p>
+            <div className="mt-2 text-xs text-muted-foreground">Manutenção: {currency(kpis?.manutencao || 0)}</div>
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-chart-4">
+        <Card className="border-l-4 border-l-accent/60">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Contas a Receber</CardTitle>
-            <FileText className="h-4 w-4 text-chart-4" />
+            <FileText className="h-4 w-4 text-accent" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-chart-4">R$ 67.890</div>
-            <p className="text-xs text-muted-foreground">Vencidas: R$ 12.340 (18.2%)</p>
-            <div className="mt-2 text-xs text-destructive">Ação necessária: 8 faturas</div>
+            {loading ? <Skeleton className="h-7 w-32" /> : <div className="text-2xl font-bold text-accent">{currency(kpis?.contas_receber || 0)}</div>}
+            <p className="text-xs text-muted-foreground">Vencidas: {currency(kpis?.contas_vencidas || 0)}</p>
+            <div className="mt-2 text-xs text-destructive">Ação necessária: {kpis?.faturas_criticas ?? 0} faturas</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Alerts Section */}
-      <Card className="border-accent/50 bg-accent/5">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-accent-foreground">
-            <AlertTriangle className="h-5 w-5 text-accent" />
-            Alertas Financeiros Críticos
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center justify-between p-3 bg-background rounded-md border border-destructive/20">
-            <div className="flex items-center gap-3">
-              <div className="h-2 w-2 bg-destructive rounded-full"></div>
-              <div>
-                <p className="text-sm font-medium">8 faturas vencidas há mais de 30 dias</p>
-                <p className="text-xs text-muted-foreground">Total: R$ 12.340 - Risco de inadimplência</p>
-              </div>
-            </div>
-            <Button size="sm" variant="destructive">
-              Cobrar
-            </Button>
-          </div>
-
-          <div className="flex items-center justify-between p-3 bg-background rounded-md border border-accent/20">
-            <div className="flex items-center gap-3">
-              <div className="h-2 w-2 bg-accent rounded-full"></div>
-              <div>
-                <p className="text-sm font-medium">Combustível 15% acima da média</p>
-                <p className="text-xs text-muted-foreground">Veículo ABC-1234 - Possível problema mecânico</p>
-              </div>
-            </div>
-            <Button size="sm" variant="outline">
-              Investigar
-            </Button>
-          </div>
-
-          <div className="flex items-center justify-between p-3 bg-background rounded-md border border-chart-1/20">
-            <div className="flex items-center gap-3">
-              <div className="h-2 w-2 bg-chart-1 rounded-full"></div>
-              <div>
-                <p className="text-sm font-medium">Oportunidade: Rota SP-RJ otimizada</p>
-                <p className="text-xs text-muted-foreground">Economia potencial: R$ 2.500/mês</p>
-              </div>
-            </div>
-            <Button size="sm" variant="outline">
-              Analisar
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Quick Actions & Recent Activity */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Quick Actions */}
-        <Card>
+      {/* Charts */}
+      <div className="grid gap-6 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
           <CardHeader>
-            <CardTitle>Ações Rápidas</CardTitle>
-            <CardDescription>Acesso rápido às funcionalidades principais</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" /> Receita × Custo
+            </CardTitle>
+            <CardDescription>Últimos meses</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3">
-            <Button className="justify-start h-auto p-4 bg-transparent" variant="outline">
-              <FileText className="h-5 w-5 mr-3" />
-              <div className="text-left">
-                <div className="font-medium">Novo Serviço</div>
-                <div className="text-xs text-muted-foreground">Cadastrar novo frete</div>
-              </div>
-            </Button>
-
-            <Button className="justify-start h-auto p-4 bg-transparent" variant="outline">
-              <DollarSign className="h-5 w-5 mr-3" />
-              <div className="text-left">
-                <div className="font-medium">Registrar Pagamento</div>
-                <div className="text-xs text-muted-foreground">Baixar conta a receber</div>
-              </div>
-            </Button>
-
-            <Button className="justify-start h-auto p-4 bg-transparent" variant="outline">
-              <Fuel className="h-5 w-5 mr-3" />
-              <div className="text-left">
-                <div className="font-medium">Registrar Abastecimento</div>
-                <div className="text-xs text-muted-foreground">Controle de combustível</div>
-              </div>
-            </Button>
-
-            <Button className="justify-start h-auto p-4 bg-transparent" variant="outline">
-              <Wrench className="h-5 w-5 mr-3" />
-              <div className="text-left">
-                <div className="font-medium">Agendar Manutenção</div>
-                <div className="text-xs text-muted-foreground">Manutenção preventiva</div>
-              </div>
-            </Button>
+          <CardContent className="h-[320px]">
+            {loading ? <Skeleton className="h-full w-full" /> : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={receitaVsCusto} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={PRIMARY} stopOpacity={0.35} />
+                      <stop offset="95%" stopColor={PRIMARY} stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="cst" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={ACCENT} stopOpacity={0.35} />
+                      <stop offset="95%" stopColor={ACCENT} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
+                  <XAxis dataKey="mes" />
+                  <YAxis tickFormatter={(v) => currency(v)} width={80} />
+                  <Tooltip formatter={(v: number) => currency(v)} />
+                  <Legend />
+                  <Area type="monotone" dataKey="receita" name="Receita" stroke={PRIMARY} fill="url(#rev)" />
+                  <Area type="monotone" dataKey="custo" name="Custo" stroke={ACCENT} fill="url(#cst)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
-        {/* Recent Activity */}
         <Card>
           <CardHeader>
-            <CardTitle>Atividade Recente</CardTitle>
-            <CardDescription>Últimas movimentações do sistema</CardDescription>
+            <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-accent" /> Alertas</CardTitle>
+            <CardDescription>Financeiros críticos</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="h-2 w-2 bg-chart-1 rounded-full"></div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Pagamento recebido - R$ 8.500</p>
-                <p className="text-xs text-muted-foreground">Cliente: Empresa ABC - há 1 hora</p>
-              </div>
-            </div>
+          <CardContent>
+            <p className="text-sm">{(kpis?.faturas_criticas ?? 0)} faturas vencidas há +30 dias</p>
+          </CardContent>
+        </Card>
+      </div>
 
-            <div className="flex items-center gap-3">
-              <div className="h-2 w-2 bg-chart-2 rounded-full"></div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Serviço #1234 concluído</p>
-                <p className="text-xs text-muted-foreground">São Paulo → Rio de Janeiro - há 2 horas</p>
-              </div>
-            </div>
+      {/* Frota + Financeiro secundário */}
+      <div className="grid gap-6 xl:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Truck className="h-5 w-5" /> Utilização da Frota</CardTitle>
+          </CardHeader>
+          <CardContent className="h-[280px]">
+            {loading ? <Skeleton className="h-full w-full" /> : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={utilizacaoFrota} dataKey="value" nameKey="name" outerRadius={90} label>
+                    {(utilizacaoFrota || []).map((_: any, i: number) => (
+                      <Cell key={i} fill={i % 2 === 0 ? PRIMARY : ACCENT} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
 
-            <div className="flex items-center gap-3">
-              <div className="h-2 w-2 bg-chart-3 rounded-full"></div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Abastecimento registrado - R$ 450</p>
-                <p className="text-xs text-muted-foreground">Veículo XYZ-5678 - há 4 horas</p>
-              </div>
-            </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5" /> Aging Recebíveis</CardTitle>
+          </CardHeader>
+          <CardContent className="h-[280px]">
+            {loading ? <Skeleton className="h-full w-full" /> : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={aging}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
+                  <XAxis dataKey="faixa" />
+                  <YAxis tickFormatter={(v) => currency(v)} />
+                  <Tooltip formatter={(v: number) => currency(v)} />
+                  <Bar dataKey="valor">
+                    {aging.map((_: any, i: number) => <Cell key={i} fill={i % 2 === 0 ? PRIMARY : ACCENT} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
 
-            <div className="flex items-center gap-3">
-              <div className="h-2 w-2 bg-chart-4 rounded-full"></div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Manutenção agendada - R$ 1.200</p>
-                <p className="text-xs text-muted-foreground">Veículo DEF-9012 - há 6 horas</p>
-              </div>
-            </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Fuel className="h-5 w-5" /> Combustível × Meta</CardTitle>
+          </CardHeader>
+          <CardContent className="h-[280px]">
+            {loading ? <Skeleton className="h-full w-full" /> : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={combSemanas}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
+                  <XAxis dataKey="sem" />
+                  <YAxis tickFormatter={(v) => currency(v)} />
+                  <Tooltip formatter={(v: number) => currency(v)} />
+                  <Legend />
+                  <Line type="monotone" dataKey="gasto" stroke={ACCENT} />
+                  <Line type="monotone" dataKey="meta" stroke={PRIMARY} strokeDasharray="5 5" />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-            <div className="flex items-center gap-3">
-              <div className="h-2 w-2 bg-destructive rounded-full"></div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Alerta: Fatura vencida</p>
-                <p className="text-xs text-muted-foreground">Cliente XYZ - R$ 3.200 - há 1 dia</p>
-              </div>
+      {/* Rotas + Manutenções */}
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Route className="h-5 w-5" /> Rotas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Rota</TableHead>
+                    <TableHead className="text-right">Serviços</TableHead>
+                    <TableHead className="text-right">Receita</TableHead>
+                    <TableHead className="text-right">Custo</TableHead>
+                    <TableHead className="text-right">Tempo Médio (h)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(rotas || []).map((r, i) => (
+                    <TableRow key={i}>
+                      <TableCell>{r.rota}</TableCell>
+                      <TableCell className="text-right">{r.servicos}</TableCell>
+                      <TableCell className="text-right">{currency(r.receita)}</TableCell>
+                      <TableCell className="text-right">{currency(r.custo)}</TableCell>
+                      <TableCell className="text-right">{r.tempoMedio}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Wrench className="h-5 w-5" /> Manutenções</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Veículo</TableHead>
+                    <TableHead>Serviço</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead className="text-right">Custo</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(manutencoes || []).map((m, i) => (
+                    <TableRow key={i}>
+                      <TableCell>{m.placa}</TableCell>
+                      <TableCell>{m.tipo}</TableCell>
+                      <TableCell>{m.data ? new Date(m.data).toLocaleDateString("pt-BR") : "-"}</TableCell>
+                      <TableCell className="text-right">{currency(m.custo)}</TableCell>
+                      <TableCell>{m.status}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Rodapé */}
+      <div className="text-center text-xs text-muted-foreground pt-4">
+        © {new Date().getFullYear()} JB Transportes — Painel operacional & financeiro
       </div>
     </div>
   )

@@ -43,7 +43,7 @@ export default function EditMaintenancePage() {
                 }
                 setInitial(data as Maintenance);
             } catch (e) {
-                console.error(e);
+                console.log(e);
                 toast.error("Erro ao carregar manutenção.");
             }
         })();

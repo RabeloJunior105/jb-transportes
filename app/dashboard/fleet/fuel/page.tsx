@@ -86,7 +86,7 @@ export default function FuelPage() {
       toast.success("Abastecimento excluído com sucesso");
       setRefreshKey((k) => k + 1);
     } catch (e) {
-      console.error(e);
+      console.log(e);
       toast.error("Erro ao excluir abastecimento");
     } finally {
       setDeleting(false);
