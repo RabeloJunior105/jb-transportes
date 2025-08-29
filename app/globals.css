@@ -16,7 +16,7 @@
   --secondary-foreground: oklch(1 0 0); /* White text on secondary */
   --muted: oklch(0.98 0 0); /* Light gray */
   --muted-foreground: oklch(0.45 0.01 258.34); /* Muted text #6B7280 */
-  --accent: oklch(0.78 0.12 85.87); /* Amber #FBBF24 */
+  --accent: oklch(0.55 0.22 15.32); /* Amber #FBBF24 */
   --accent-foreground: oklch(0.18 0.02 258.34); /* Dark text on accent */
   --destructive: oklch(0.7 0.15 12.57); /* Error red #F87171 */
   --destructive-foreground: oklch(1 0 0); /* White text on destructive */
@@ -24,7 +24,7 @@
   --input: oklch(0.96 0 0); /* Input background #F3F4F6 */
   --ring: oklch(0.55 0.22 15.32 / 0.5); /* JB Red with opacity for focus */
   --chart-1: oklch(0.7 0.14 162.48); /* Success green #10B981 */
-  --chart-2: oklch(0.78 0.12 85.87); /* Warning amber #FBBF24 */
+  --chart-2: oklch(0.55 0.22 15.32); /* Warning amber #FBBF24 */
   --chart-3: oklch(0.75 0.15 85.87); /* Info yellow #EAB308 */
   --chart-4: oklch(0.7 0.15 12.57); /* Error red #F87171 */
   --chart-5: oklch(0.7 0.1 264.38); /* Neutral blue #A5B4FC */
@@ -33,7 +33,7 @@
   --sidebar-foreground: oklch(1 0 0); /* White text in sidebar */
   --sidebar-primary: oklch(0.55 0.22 15.32); /* JB Red for primary actions */
   --sidebar-primary-foreground: oklch(1 0 0); /* White text on sidebar primary */
-  --sidebar-accent: oklch(0.78 0.12 85.87); /* Amber accent in sidebar */
+  --sidebar-accent: oklch(0.55 0.22 15.32); /* Amber accent in sidebar */
   --sidebar-accent-foreground: oklch(0.18 0.02 258.34); /* Dark text on sidebar accent */
   --sidebar-border: oklch(0.92 0 0); /* Light border for sidebar */
   --sidebar-ring: oklch(0.55 0.22 15.32 / 0.5); /* JB Red ring for sidebar focus */
@@ -52,7 +52,7 @@
   --secondary-foreground: oklch(0.98 0 0); /* Light text on secondary */
   --muted: oklch(0.22 0.02 258.34); /* Muted dark */
   --muted-foreground: oklch(0.65 0.01 258.34); /* Muted light text */
-  --accent: oklch(0.78 0.12 85.87); /* Keep amber accent */
+  --accent: oklch(0.55 0.22 15.32); /* Keep amber accent */
   --accent-foreground: oklch(0.11 0.01 258.34); /* Dark text on accent */
   --destructive: oklch(0.6 0.2 12.57); /* Darker destructive */
   --destructive-foreground: oklch(0.98 0 0); /* Light text on destructive */
@@ -63,7 +63,7 @@
   --sidebar-foreground: oklch(0.98 0 0); /* Light sidebar text */
   --sidebar-primary: oklch(0.55 0.22 15.32); /* JB Red primary */
   --sidebar-primary-foreground: oklch(1 0 0); /* White text */
-  --sidebar-accent: oklch(0.78 0.12 85.87); /* Amber accent */
+  --sidebar-accent: oklch(0.55 0.22 15.32); /* Amber accent */
   --sidebar-accent-foreground: oklch(0.11 0.01 258.34); /* Dark text on accent */
   --sidebar-border: oklch(0.22 0.02 258.34); /* Dark sidebar border */
   --sidebar-ring: oklch(0.55 0.22 15.32 / 0.5); /* JB Red ring */

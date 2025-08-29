@@ -9,15 +9,47 @@ import {
     CreateClientData,
     Supplier,
     CreateSupplierData,
+    EmployeesSummary,
 } from "../types/people.types";
 
-// Employee functions
-export async function getEmployeesClient(): Promise<Employee[]> {
-    const supabase = createBrowserClient();
-    const { data, error } = await supabase.from("employees").select("*");
+interface GetEmployeesOptions {
+    page?: number;
+    itemsPerPage?: number;
+    search?: string;
+    status?: string;
+    position?: string;
+}
 
-    if (error) throw error;
-    return data as Employee[];
+export async function getEmployeesClient({
+    page = 1,
+    itemsPerPage = 10,
+    search,
+    status,
+    position,
+}: GetEmployeesOptions = {}): Promise<{ data: Employee[]; total: number }> {
+    const supabase = createBrowserClient();
+
+    try {
+        let query = supabase.from("employees").select("*", { count: "exact" });
+
+        // filtros dinâmicos
+        if (search) query = query.ilike("name", `%${search}%`);
+        if (status && status !== "all") query = query.eq("status", status);
+        if (position && position !== "all") query = query.eq("position", position);
+
+        // paginação
+        const from = (page - 1) * itemsPerPage;
+        const to = from + itemsPerPage - 1;
+
+        const { data, count, error } = await query.range(from, to);
+
+        if (error) throw error;
+
+        return { data: data ?? [], total: count ?? 0 };
+    } catch (err) {
+        console.log("Erro ao buscar funcionários:", err);
+        return { data: [], total: 0 };
+    }
 }
 
 export async function getEmployeeClient(id: string): Promise<Employee> {
@@ -28,8 +60,34 @@ export async function getEmployeeClient(id: string): Promise<Employee> {
     return data as Employee;
 }
 
+export async function getSummaryEmployees(): Promise<EmployeesSummary> {
+    const supabase = createBrowserClient();
+    const { data: employees, error } = await supabase
+        .from("employees")
+        .select("id,status,position,license_expiry");
+
+    if (error) throw error;
+
+    const now = new Date();
+    const soon = new Date();
+    soon.setMonth(now.getMonth() + 1);
+
+    return {
+        totalEmployees: employees.length,
+        activeEmployees: employees.filter(e => e.status === "active").length,
+        drivers: employees.filter(e => e.position?.toLowerCase() === "motorista").length,
+        licenseExpiring: employees.filter(e => e.license_expiry && new Date(e.license_expiry) <= soon).length,
+    };
+}
+
 export async function createEmployeeClient(employeeData: CreateEmployeeData): Promise<Employee> {
     const supabase = createBrowserClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) throw new Error("User not authenticated");
+
+    employeeData.user_id = user.id;
+
     const { data, error } = await supabase.from("employees").insert(employeeData).select().single();
 
     if (error) throw error;

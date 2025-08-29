@@ -17,6 +17,7 @@ import {
   Award,
 } from "lucide-react"
 import Link from "next/link"
+import { createClient } from '@supabase/supabase-js'
 
 export default function LandingPage() {
   return (
@@ -45,17 +46,35 @@ export default function LandingPage() {
                 Contato
               </a>
             </div>
-            <Link href="/login">
-              <Button variant="outline" size="sm">
-                Entrar
-              </Button>
-            </Link>
+            {/* Profile/Login Button */}
+            {/* Mock user object for demonstration; replace with real authentication logic */}
+            {(async () => {
+              // Supabase authentication
+              const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+              const { data: { user } } = await supabase.auth.getUser()
+
+              return user ? (
+                <Link href="/dashboard">
+                  <Button variant="outline" size="sm" className="p-0 rounded-full w-9 h-9 flex items-center justify-center">
+                    <span className="bg-primary text-primary-foreground rounded-full w-9 h-9 flex items-center justify-center font-bold text-lg">
+                      {`${user.user_metadata.first_name?.[0] ?? ""}${user.user_metadata.last_name?.[0] ?? ""}`.toUpperCase()}
+                    </span>
+                  </Button>
+                </Link>
+              ) : (
+                <Link href="/login">
+                  <Button variant="outline" size="sm">
+                    Entrar
+                  </Button>
+                </Link>
+              );
+            })()}
           </div>
         </div>
-      </header>
+      </header >
 
       {/* Hero Section */}
-      <section className="relative py-24 px-4 bg-gradient-to-br from-background via-muted/20 to-background overflow-hidden">
+      < section className="relative py-24 px-4 bg-gradient-to-br from-background via-muted/20 to-background overflow-hidden" >
         <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
         <div className="container mx-auto text-center max-w-6xl relative">
           <Badge variant="secondary" className="mb-6 text-sm px-4 py-2">
@@ -109,10 +128,10 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
-      </section>
+      </section >
 
       {/* Services Section */}
-      <section id="servicos" className="py-20 px-4 bg-muted/30">
+      < section id="servicos" className="py-20 px-4 bg-muted/30" >
         <div className="container mx-auto">
           <div className="text-center mb-16">
             <Badge variant="outline" className="mb-4">
@@ -214,10 +233,10 @@ export default function LandingPage() {
             </Card>
           </div>
         </div>
-      </section>
+      </section >
 
       {/* Why Choose Us */}
-      <section className="py-20 px-4">
+      < section className="py-20 px-4" >
         <div className="container mx-auto">
           <div className="text-center mb-16">
             <Badge variant="outline" className="mb-4">
@@ -270,10 +289,10 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
-      </section>
+      </section >
 
       {/* Testimonials */}
-      <section className="py-20 px-4 bg-muted/30">
+      < section className="py-20 px-4 bg-muted/30" >
         <div className="container mx-auto">
           <div className="text-center mb-16">
             <Badge variant="outline" className="mb-4">
@@ -362,10 +381,10 @@ export default function LandingPage() {
             </Card>
           </div>
         </div>
-      </section>
+      </section >
 
       {/* CTA Section */}
-      <section id="contato" className="py-20 px-4 bg-primary text-primary-foreground">
+      < section id="contato" className="py-20 px-4 bg-primary text-primary-foreground" >
         <div className="container mx-auto text-center">
           <h2 className="text-4xl md:text-5xl font-bold mb-6">Pronto para transportar sua carga pesada?</h2>
           <p className="text-xl mb-12 max-w-3xl mx-auto opacity-90">
@@ -415,10 +434,10 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
-      </section>
+      </section >
 
       {/* Footer */}
-      <footer className="bg-card border-t border-border py-12 px-4">
+      < footer className="bg-card border-t border-border py-12 px-4" >
         <div className="container mx-auto">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
@@ -473,7 +492,7 @@ export default function LandingPage() {
             </p>
           </div>
         </div>
-      </footer>
-    </div>
+      </footer >
+    </div >
   )
 }

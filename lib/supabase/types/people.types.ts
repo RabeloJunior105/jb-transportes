@@ -39,6 +39,7 @@ export interface CreateEmployeeData {
   license_category?: string;
   license_expiry?: string;
   status: string;
+  user_id?: string;
 }
 
 // Client interfaces
@@ -99,4 +100,11 @@ export interface CreateSupplierData {
   zip_code: string;
   category: string;
   status: string;
+}
+
+export interface EmployeesSummary {
+  totalEmployees: number;
+  activeEmployees: number;
+  drivers: number;
+  licenseExpiring: number;
 }
