@@ -341,7 +341,7 @@ export default function EmployeeViewPage() {
           setServices(srows);
         }
       } catch (e) {
-        console.error(e);
+        console.log(e);
         toast.error("Não foi possível carregar o funcionário.");
       } finally {
         setLoading(false);

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { Loader2, MoreHorizontal, Eye, Edit, Trash2 } from "lucide-react";
+import { Loader2, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -19,20 +19,30 @@ interface FieldConfig {
     render?: (value: any, row: any) => React.ReactNode;
 }
 
-interface ActionConfig {
+export type RowAction<T> = {
     label: string;
     icon?: React.ReactNode;
-    href?: (row: any) => string;
-    onClick?: (row: any) => void;
+    /** href pode ser string fixa ou função baseada na linha */
+    href?: string | ((row: T) => string);
+    onClick?: (row: T) => void;
     color?: "default" | "destructive";
-}
+    /** se definido, controla se a ação aparece para essa linha */
+    visible?: (row: T) => boolean;
+    /** se definido, deixa o item desabilitado para essa linha */
+    disabled?: (row: T) => boolean;
+};
 
 interface RecordListProps<T> {
     title: string;
     description?: string;
     fields: FieldConfig[];
-    actions?: ActionConfig[];
-    fetchData: (params: { page: number; itemsPerPage: number; search?: string; filters?: any }) => Promise<{ data: T[]; total: number }>;
+    actions?: RowAction<T>[];
+    fetchData: (params: {
+        page: number;
+        itemsPerPage: number;
+        search?: string;
+        filters?: any;
+    }) => Promise<{ data: T[]; total: number }>;
     itemsPerPage?: number;
     filters?: { name: string; label: string; options: { label: string; value: string }[] }[];
 }
@@ -55,16 +65,22 @@ export function RecordList<T extends { id: string }>({
 
     useEffect(() => {
         load();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentPage, searchTerm, filterValues]);
 
     const load = async () => {
         setLoading(true);
         try {
-            const { data, total } = await fetchData({ page: currentPage, itemsPerPage, search: searchTerm, filters: filterValues });
+            const { data, total } = await fetchData({
+                page: currentPage,
+                itemsPerPage,
+                search: searchTerm,
+                filters: filterValues,
+            });
             setRows(data);
             setTotal(total);
         } catch (err) {
-            console.error(err);
+            console.log(err);
             toast.error("Erro ao carregar dados");
         } finally {
             setLoading(false);
@@ -129,43 +145,89 @@ export function RecordList<T extends { id: string }>({
                                 {fields.map((f) => (
                                     <TableHead key={f.name}>{f.label}</TableHead>
                                 ))}
-                                {actions?.length && <TableHead>Ações</TableHead>}
+                                {actions?.length ? <TableHead>Ações</TableHead> : null}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {rows.map((row: any) => (
-                                <TableRow key={row.id}>
-                                    {fields.map((f) => (
-                                        <TableCell key={f.name}>
-                                            {f.render ? f.render(row[f.name], row) : row[f.name]}
-                                        </TableCell>
-                                    ))}
-                                    {actions?.length && (
-                                        <TableCell>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" className="h-8 w-8 p-0">
-                                                        <span className="sr-only">Abrir menu</span>
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    {actions.map((action, i) => (
-                                                        <DropdownMenuItem
-                                                            key={i}
-                                                            onClick={() => action.onClick && action.onClick(row)}
-                                                            className={action.color === "destructive" ? "text-destructive" : ""}
-                                                        >
-                                                            {action.icon && <span className="mr-2">{action.icon}</span>}
-                                                            {action.href ? <Link href={action.href(row)}>{action.label}</Link> : action.label}
-                                                        </DropdownMenuItem>
-                                                    ))}
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    )}
-                                </TableRow>
-                            ))}
+                            {rows.map((row: T) => {
+                                const actionsToShow = (actions ?? []).filter(
+                                    (a) => !a.visible || a.visible(row)
+                                );
+
+                                return (
+                                    <TableRow key={row.id}>
+                                        {fields.map((f) => (
+                                            <TableCell key={f.name}>
+                                                {f.render ? f.render((row as any)[f.name], row) : (row as any)[f.name]}
+                                            </TableCell>
+                                        ))}
+
+                                        {actions?.length ? (
+                                            <TableCell className="w-0">
+                                                {actionsToShow.length > 0 ? (
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="ghost" className="h-8 w-8 p-0">
+                                                                <span className="sr-only">Abrir menu</span>
+                                                                <MoreHorizontal className="h-4 w-4" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            {actionsToShow.map((action, i) => {
+                                                                const disabled = action.disabled ? action.disabled(row) : false;
+                                                                const href =
+                                                                    typeof action.href === "function"
+                                                                        ? action.href(row)
+                                                                        : action.href;
+
+                                                                const className = [
+                                                                    action.color === "destructive" ? "text-destructive" : "",
+                                                                    disabled ? "opacity-50 pointer-events-none" : "",
+                                                                ]
+                                                                    .filter(Boolean)
+                                                                    .join(" ");
+
+                                                                // Link como item do menu quando tiver href e não estiver desabilitado
+                                                                if (href && !disabled) {
+                                                                    return (
+                                                                        <DropdownMenuItem key={i} asChild className={className}>
+                                                                            <Link href={href} className="flex items-center">
+                                                                                {action.icon && <span className="mr-2">{action.icon}</span>}
+                                                                                {action.label}
+                                                                            </Link>
+                                                                        </DropdownMenuItem>
+                                                                    );
+                                                                }
+
+                                                                // Item clicável (ou desabilitado) quando não tiver href
+                                                                return (
+                                                                    <DropdownMenuItem
+                                                                        key={i}
+                                                                        disabled={disabled}
+                                                                        onClick={
+                                                                            disabled || !action.onClick
+                                                                                ? undefined
+                                                                                : () => action.onClick!(row)
+                                                                        }
+                                                                        className={className}
+                                                                    >
+                                                                        {action.icon && <span className="mr-2">{action.icon}</span>}
+                                                                        {action.label}
+                                                                    </DropdownMenuItem>
+                                                                );
+                                                            })}
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                ) : (
+                                                    // Quando nenhuma ação estiver visível para a linha,
+                                                    // renderizamos uma célula vazia para manter o layout.
+                                                    <div className="text-xs text-muted-foreground">—</div>
+                                                )}
+                                            </TableCell>
+                                        ) : null}
+                                    </TableRow>
+                                );
+                            })}
                         </TableBody>
                     </Table>
                 )}

@@ -74,10 +74,10 @@ const one = <T,>(v: any): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ??
 
 const getStatusBadge = (status: string) => {
   const map: Record<string, { label: string; className: string }> = {
-    pending:      { label: "Pendente",     className: "border" },
-    in_progress:  { label: "Em andamento", className: "bg-blue-500 text-white" },
-    completed:    { label: "Concluída",    className: "bg-green-600 text-white" },
-    canceled:     { label: "Cancelada",    className: "bg-destructive text-destructive-foreground" },
+    pending: { label: "Pendente", className: "border" },
+    in_progress: { label: "Em andamento", className: "bg-blue-500 text-white" },
+    completed: { label: "Concluída", className: "bg-green-600 text-white" },
+    canceled: { label: "Cancelada", className: "bg-destructive text-destructive-foreground" },
   };
   const it = map[status] ?? { label: status, className: "border" };
   return <Badge className={it.className}>{it.label}</Badge>;
@@ -86,8 +86,8 @@ const getStatusBadge = (status: string) => {
 const getTypeBadge = (type: string) => {
   const map: Record<string, { label: string; className: string }> = {
     preventive: { label: "Preventiva", className: "bg-sky-500 text-white" },
-    corrective: { label: "Corretiva",  className: "bg-amber-500 text-white" },
-    inspection: { label: "Inspeção",   className: "bg-emerald-500 text-white" },
+    corrective: { label: "Corretiva", className: "bg-amber-500 text-white" },
+    inspection: { label: "Inspeção", className: "bg-emerald-500 text-white" },
   };
   const it = map[type] ?? { label: type, className: "border" };
   return <Badge className={it.className}>{it.label}</Badge>;
@@ -161,7 +161,7 @@ export default function MaintenancePage() {
       toast.success("Manutenção excluída com sucesso");
       setRefreshKey((k) => k + 1);
     } catch (error) {
-      console.error(error);
+      console.log(error);
       toast.error("Erro ao excluir manutenção");
     } finally {
       setDeleting(false);
@@ -224,8 +224,8 @@ export default function MaintenancePage() {
             label: "Tipo",
             options: [
               { label: "Preventiva", value: "preventive" },
-              { label: "Corretiva",  value: "corrective" },
-              { label: "Inspeção",   value: "inspection" },
+              { label: "Corretiva", value: "corrective" },
+              { label: "Inspeção", value: "inspection" },
             ],
           },
         ]}

@@ -444,7 +444,7 @@ export default function RecordForm({
             toast.success("Registro salvo com sucesso!");
             if (backHref) router.push(backHref);
         } catch (err) {
-            console.error(err);
+            console.log(err);
             toast.error("Ocorreu um erro ao salvar o registro.");
         } finally {
             setIsLoading(false);

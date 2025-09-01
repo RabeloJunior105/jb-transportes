@@ -87,7 +87,7 @@ export default function EmployeesPage() {
       toast.success(`Funcionário ${target.name} excluído com sucesso`);
       setRefreshKey((k) => k + 1);          // ← força recarregar a grid
     } catch (error) {
-      console.error(error);
+      console.log(error);
       toast.error("Erro ao excluir funcionário");
     } finally {
       setDeleting(false);

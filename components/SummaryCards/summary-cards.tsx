@@ -3,16 +3,17 @@
 import { useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
-export interface SummaryCardConfig {
+export interface SummaryCardConfig<T = any> {
     title: string;
     icon: React.ReactNode;
-    valueKey: string; // campo do objeto retornado
-    colorClass?: string;
+    valueKey: string;            // chave no objeto retornado por fetchData
+    colorClass?: string;         // ex.: "text-chart-1"
+    format?: (value: any, data?: T) => React.ReactNode; // formatação opcional
 }
 
 interface SummaryCardsProps<T> {
     fetchData: () => Promise<T>;
-    cards: SummaryCardConfig[];
+    cards: SummaryCardConfig<T>[];
 }
 
 export function SummaryCards<T>({ fetchData, cards }: SummaryCardsProps<T>) {
@@ -21,6 +22,7 @@ export function SummaryCards<T>({ fetchData, cards }: SummaryCardsProps<T>) {
 
     useEffect(() => {
         fetchSummary();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const fetchSummary = async () => {
@@ -29,8 +31,8 @@ export function SummaryCards<T>({ fetchData, cards }: SummaryCardsProps<T>) {
             const result = await fetchData();
             setData(result);
         } catch (err) {
-            console.error("Erro ao carregar summary:", err);
-            setData(null); // Garantir que seja null em caso de erro
+            console.log("Erro ao carregar summary:", err);
+            setData(null);
         } finally {
             setLoading(false);
         }
@@ -38,22 +40,28 @@ export function SummaryCards<T>({ fetchData, cards }: SummaryCardsProps<T>) {
 
     return (
         <div className="grid gap-4 md:grid-cols-4">
-            {cards.map((card) => (
-                <Card key={card.title}>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
-                        <div className={`h-4 w-4 ${card.colorClass}`}>{card.icon}</div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className={`text-2xl font-bold ${card.colorClass}`}>
-                            {/* Se data for null ou o campo estiver undefined, mostra 0 */}
-                            {data && data[card.valueKey as keyof T] != null
-                                ? String(data[card.valueKey as keyof T])
-                                : "0"}
-                        </div>
-                    </CardContent>
-                </Card>
-            ))}
+            {cards.map((card) => {
+                const raw = data ? (data as any)?.[card.valueKey] : undefined;
+                const content =
+                    card.format ? card.format(raw, data ?? undefined) : (raw ?? 0).toString();
+
+                return (
+                    <Card key={card.title}>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
+                            <div className={card.colorClass ?? "text-muted-foreground"}>
+                                {/* o ícone herda a cor via currentColor */}
+                                {card.icon}
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className={`text-2xl font-bold ${card.colorClass ?? ""}`}>
+                                {loading ? "—" : content}
+                            </div>
+                        </CardContent>
+                    </Card>
+                );
+            })}
         </div>
     );
 }

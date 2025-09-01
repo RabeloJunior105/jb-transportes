@@ -1,274 +1,161 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Building2, Search, Plus, MoreHorizontal, Edit, Trash2, Phone, Mail } from "lucide-react"
-import Link from "next/link"
+import { useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+import { Building2, Plus, Eye, Edit, Trash2 } from "lucide-react";
 
-// Mock data for suppliers
-const suppliersData = [
-  {
-    id: 1,
-    name: "Auto Peças Silva",
-    cnpj: "12.345.678/0001-90",
-    contact: "João Silva",
-    phone: "(11) 98765-4321",
-    email: "joao@autopecassilva.com.br",
-    category: "Peças",
-    status: "Ativo",
-    city: "São Paulo",
-    state: "SP",
-  },
-  {
-    id: 2,
-    name: "Posto Combustível Central",
-    cnpj: "98.765.432/0001-10",
-    contact: "Maria Santos",
-    phone: "(11) 91234-5678",
-    email: "maria@postocentral.com.br",
-    category: "Combustível",
-    status: "Ativo",
-    city: "Campinas",
-    state: "SP",
-  },
-  {
-    id: 3,
-    name: "Oficina Mecânica Rápida",
-    cnpj: "11.222.333/0001-44",
-    contact: "Carlos Oliveira",
-    phone: "(11) 95555-1234",
-    email: "carlos@oficinarapida.com.br",
-    category: "Manutenção",
-    status: "Inativo",
-    city: "Santos",
-    state: "SP",
-  },
-]
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { RecordList } from "@/components/ListForm/record-list";
+import { SummaryCards } from "@/components/SummaryCards/summary-cards";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
+import { makeFetchDataClient } from "@/lib/utils/makeFetchDataClient";
 
-const statusColors = {
-  Ativo: "bg-green-100 text-green-800 border-green-200",
-  Inativo: "bg-red-100 text-red-800 border-red-200",
+import type { Supplier } from "./config";
+
+const SUPPLIER_SELECT = `
+  id, user_id, name, document, email, phone, address, city, state, zip_code, status, created_at, updated_at
+`;
+
+const statusBadge = (status: Supplier["status"]) => {
+  const map: Record<Supplier["status"], { label: string; cls: string }> = {
+    active: { label: "Ativo", cls: "bg-green-600 text-white" },
+    inactive: { label: "Inativo", cls: "bg-muted text-foreground" },
+  };
+  const it = map[status] ?? { label: String(status), cls: "border" } as any;
+  return <Badge className={it.cls}>{it.label}</Badge>;
+};
+
+async function getSummarySuppliers() {
+  const sb = createBrowserClient();
+  const { data, error } = await sb.from("suppliers").select("status, state");
+  if (error) throw error;
+  const total = data?.length ?? 0;
+  const active = data?.filter((d) => d.status === "active").length ?? 0;
+  const inactive = total - active;
+  const states = new Set((data ?? []).map((d: any) => d.state).filter(Boolean)).size;
+  return { total, active, inactive, states };
 }
 
-const categoryColors = {
-  Peças: "bg-blue-100 text-blue-800 border-blue-200",
-  Combustível: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  Manutenção: "bg-purple-100 text-purple-800 border-purple-200",
+const fetchSuppliers = makeFetchDataClient<Supplier>({
+  table: "suppliers",
+  select: SUPPLIER_SELECT,
+  defaultOrder: { column: "created_at", ascending: false },
+  searchFields: ["name", "document", "email", "phone", "city"],
+  filterMap: {
+    status: "status",
+    state: "state",
+  },
+});
+
+async function deleteSupplierClient(id: string) {
+  const sb = createBrowserClient();
+  const { error } = await sb.from("suppliers").delete().eq("id", id);
+  if (error) throw error;
 }
 
 export default function SuppliersPage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [categoryFilter, setCategoryFilter] = useState("all")
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [target, setTarget] = useState<Supplier | null>(null);
 
-  const filteredSuppliers = suppliersData.filter((supplier) => {
-    const matchesSearch =
-      supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      supplier.cnpj.includes(searchTerm) ||
-      supplier.contact.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "all" || supplier.status === statusFilter
-    const matchesCategory = categoryFilter === "all" || supplier.category === categoryFilter
+  const openDeleteModal = (row: Supplier) => { setTarget(row); setConfirmOpen(true); };
 
-    return matchesSearch && matchesStatus && matchesCategory
-  })
+  const handleConfirmDelete = async () => {
+    if (!target) return;
+    setDeleting(true);
+    try {
+      await deleteSupplierClient(target.id);
+      toast.success("Fornecedor excluído com sucesso");
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      console.error(e);
+      toast.error("Erro ao excluir fornecedor");
+    } finally {
+      setDeleting(false);
+      setConfirmOpen(false);
+      setTarget(null);
+    }
+  };
 
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Fornecedores</h2>
-          <p className="text-muted-foreground">Gerencie os fornecedores da empresa</p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button asChild>
-            <Link href="/dashboard/suppliers/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Novo Fornecedor
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Fornecedores</CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{suppliersData.length}</div>
-            <p className="text-xs text-muted-foreground">Fornecedores cadastrados</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Fornecedores Ativos</CardTitle>
-            <Building2 className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {suppliersData.filter((s) => s.status === "Ativo").length}
-            </div>
-            <p className="text-xs text-muted-foreground">Em operação</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Categorias</CardTitle>
-            <Building2 className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{new Set(suppliersData.map((s) => s.category)).size}</div>
-            <p className="text-xs text-muted-foreground">Tipos diferentes</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Estados</CardTitle>
-            <Building2 className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-600">{new Set(suppliersData.map((s) => s.state)).size}</div>
-            <p className="text-xs text-muted-foreground">Regiões atendidas</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Filtros</CardTitle>
-          <CardDescription>Use os filtros abaixo para encontrar fornecedores específicos</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col space-y-4 md:flex-row md:space-y-0 md:space-x-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por nome, CNPJ ou contato..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
-                />
-              </div>
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os Status</SelectItem>
-                <SelectItem value="Ativo">Ativo</SelectItem>
-                <SelectItem value="Inativo">Inativo</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as Categorias</SelectItem>
-                <SelectItem value="Peças">Peças</SelectItem>
-                <SelectItem value="Combustível">Combustível</SelectItem>
-                <SelectItem value="Manutenção">Manutenção</SelectItem>
-              </SelectContent>
-            </Select>
+    <div className="flex-1 p-4 md:p-8 pt-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Building2 className="h-7 w-7" />
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Fornecedores</h1>
+            <p className="text-muted-foreground">Gerencie os fornecedores da empresa</p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+        <Link href="/dashboard/suppliers/new">
+          <Button className="bg-primary hover:bg-primary/90">
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Fornecedor
+          </Button>
+        </Link>
+      </div>
 
-      {/* Suppliers Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Lista de Fornecedores</CardTitle>
-          <CardDescription>{filteredSuppliers.length} fornecedor(es) encontrado(s)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome/CNPJ</TableHead>
-                <TableHead>Contato</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Localização</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredSuppliers.map((supplier) => (
-                <TableRow key={supplier.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{supplier.name}</div>
-                      <div className="text-sm text-muted-foreground">{supplier.cnpj}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{supplier.contact}</div>
-                      <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                        <Phone className="h-3 w-3" />
-                        <span>{supplier.phone}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                        <Mail className="h-3 w-3" />
-                        <span>{supplier.email}</span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={categoryColors[supplier.category as keyof typeof categoryColors]}>
-                      {supplier.category}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{supplier.city}</div>
-                      <div className="text-sm text-muted-foreground">{supplier.state}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={statusColors[supplier.status as keyof typeof statusColors]}>
-                      {supplier.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Abrir menu</span>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/dashboard/suppliers/${supplier.id}/edit`}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Editar
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600">
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* Summary */}
+      <SummaryCards
+        fetchData={getSummarySuppliers}
+        cards={[
+          { title: "Total", valueKey: "total", icon: <Building2 />, colorClass: "text-primary" },
+          { title: "Ativos", valueKey: "active", icon: <Building2 />, colorClass: "text-chart-1" },
+          { title: "Inativos", valueKey: "inactive", icon: <Building2 />, colorClass: "text-destructive" },
+          { title: "Estados", valueKey: "states", icon: <Building2 />, colorClass: "text-chart-3" },
+        ]}
+      />
+
+      {/* Lista */}
+      <RecordList<Supplier>
+        key={refreshKey}
+        title="Lista de Fornecedores"
+        description="Fornecedores cadastrados"
+        itemsPerPage={10}
+        fetchData={fetchSuppliers}
+        filters={[
+          { name: "status", label: "Status", options: [{ label: "Ativo", value: "active" }, { label: "Inativo", value: "inactive" }] },
+          {
+            name: "state", label: "UF", options: [
+              { label: "SP", value: "SP" }, { label: "RJ", value: "RJ" }, { label: "MG", value: "MG" }, { label: "PR", value: "PR" }, { label: "RS", value: "RS" }, { label: "SC", value: "SC" }, { label: "BA", value: "BA" }, { label: "PE", value: "PE" }, { label: "CE", value: "CE" }, { label: "DF", value: "DF" },
+            ]
+          },
+        ]}
+        fields={[
+          {
+            name: "name", label: "Nome", type: "text", render: (v, row) => (
+              <Link href={`/dashboard/suppliers/${row.id}`} className="hover:underline">{v}</Link>
+            )
+          },
+          { name: "document", label: "Documento", type: "text" },
+          { name: "city", label: "Cidade", type: "text", render: (v, row) => (<>{row.city ?? "—"}{row.state ? `/${row.state}` : ""}</>) },
+          { name: "email", label: "E-mail", type: "text" },
+          { name: "phone", label: "Telefone", type: "text" },
+          { name: "status", label: "Status", type: "badge", render: (val) => statusBadge(val) },
+        ]}
+        actions={[
+          { label: "Ver", icon: <Eye className="h-4 w-4" />, href: (row) => `/dashboard/suppliers/${row.id}` },
+          { label: "Editar", icon: <Edit className="h-4 w-4" />, href: (row) => `/dashboard/suppliers/${row.id}/edit` },
+          { label: "Excluir", icon: <Trash2 className="h-4 w-4" />, color: "destructive", onClick: (row) => openDeleteModal(row) },
+        ]}
+      />
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        loading={deleting}
+        title="Excluir fornecedor"
+        description={<>Tem certeza que deseja excluir este fornecedor?</>}
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        destructive
+        onConfirm={handleConfirmDelete}
+      />
     </div>
-  )
+  );
 }

@@ -140,7 +140,7 @@ export default function FuelViewPage() {
 
                 setFuel(row);
             } catch (e) {
-                console.error(e);
+                console.log(e);
                 toast.error("Não foi possível carregar o abastecimento.");
             } finally {
                 setLoading(false);

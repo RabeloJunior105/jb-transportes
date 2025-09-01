@@ -142,7 +142,7 @@ export default function VehicleViewPage() {
                     if (!error) setMaintenances((data ?? []) as any[]);
                 }
             } catch (e) {
-                console.error(e);
+                console.log(e);
                 toast.error("Não foi possível carregar o veículo.");
             } finally {
                 setLoading(false);
