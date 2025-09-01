@@ -52,6 +52,15 @@ const data = {
   navMain: [
     { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     { title: "Serviços", url: "/dashboard/services", icon: FileText },
+    { title: "RH", url: "/dashboard/people/employees", icon: Users },
+    {
+      title: "Financeiro",
+      icon: DollarSign,
+      items: [
+        { title: "Contas a Pagar", url: "/dashboard/finance/payable" },
+        { title: "Contas a Receber", url: "/dashboard/finance/receivable" },
+      ],
+    },
     {
       title: "Frota",
       icon: Truck,
@@ -62,15 +71,6 @@ const data = {
       ],
     },
     {
-      title: "Financeiro",
-      icon: DollarSign,
-      items: [
-        { title: "Contas a Pagar", url: "/dashboard/finance/payable" },
-        { title: "Contas a Receber", url: "/dashboard/finance/receivable" },
-      ],
-    },
-    { title: "RH", url: "/dashboard/people/employees", icon: Users },
-    {
       title: "Associados",
       icon: Building2,
       items: [
@@ -80,19 +80,16 @@ const data = {
     },
   ],
   navSecondary: [
-    { title: "Perfil", url: "/dashboard/profile", icon: User2 },
-    { title: "Relatórios", url: "/dashboard/reports", icon: BarChart3 },
-    { title: "Configurações", url: "/dashboard/settings", icon: Settings },
+    /*  { title: "Perfil", url: "/dashboard/profile", icon: User2 },
+     { title: "Relatórios", url: "/dashboard/reports", icon: BarChart3 },
+     { title: "Configurações", url: "/dashboard/settings", icon: Settings }, */
   ],
 } as const;
 
-// ====================== HELPERS ATIVO POR ÚLTIMO SEGMENTO ======================
-// UUID v4 (boa o suficiente pro caso)
 const UUID_RE =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
 const NUM_RE = /^\d+$/;
 
-// Pega o último segmento estável da rota atual (ignora ids/uuids)
 function lastStableSegment(pathname: string) {
   const segs = pathname.split("/").filter(Boolean);
   if (segs[0] === "dashboard") segs.shift(); // ignora base
@@ -260,7 +257,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         <SidebarGroup className="mt-8">
           <SidebarGroupContent>
             <SidebarMenu className="space-y-2">
-              {data.navSecondary.map((item) => {
+              {data.navSecondary.map((item: any) => {
                 const active = isItemActive(pathname, item.url);
                 return (
                   <SidebarMenuItem key={item.title}>
@@ -317,12 +314,12 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                     Perfil
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild className="hover:bg-accent cursor-pointer">
+                {/*                 <DropdownMenuItem asChild className="hover:bg-accent cursor-pointer">
                   <Link href="/dashboard/settings" prefetch>
                     <Settings className="size-4" />
                     Configurações
                   </Link>
-                </DropdownMenuItem>
+                </DropdownMenuItem> */}
                 <DropdownMenuItem
                   className="hover:bg-accent text-destructive cursor-pointer"
                   onClick={onSignOut}
