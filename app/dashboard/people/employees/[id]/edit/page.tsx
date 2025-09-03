@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { createCrudClient } from "@/lib/supabase-crud/client/client";
-import { Employee, UpdateEmployee } from "@/lib/supabase-crud/types";
 import RecordForm from "@/components/RecordForm/form.record";
-import { employeeFormConfig } from "../../config";
+import { Employee, employeeFormConfig, UpdateEmployee } from "../../config";
 
 const Employees = createCrudClient<Employee, any>({
     table: "employees",
@@ -32,17 +31,35 @@ export default function EditEmployeePage() {
             initialValues={initial}
             typeHints={{
                 hire_date: "date",
-                cnh_expiry: "date",
+                license_expiry: "date",
                 salary: "number",
             }}
             onSubmit={async (values: any) => {
-                // monta patch só com campos alterados (opcional)
                 const patch: UpdateEmployee = {};
+
                 for (const k of Object.keys(values)) {
-                    if ((values as any)[k] !== (initial as any)[k]) {
-                        (patch as any)[k] = (values as any)[k];
+                    const newVal = (values as any)[k];
+                    const oldVal = (initial as any)[k];
+
+                    // caso especial: cnh_category (array)
+                    if (k === "license_category") {
+                        const arr = Array.isArray(newVal) ? newVal : [];
+                        const joined = arr.length ? arr.join(",") : null;
+                        const oldJoined = initial.license_category ?? null;
+
+                        if (joined !== oldJoined) {
+                            (patch as any).license_category = joined;
+                        }
+                    } else if (newVal !== oldVal) {
+                        (patch as any)[k] = newVal;
                     }
                 }
+
+                if (Object.keys(patch).length === 0) {
+                    console.log("Nenhuma alteração detectada");
+                    return;
+                }
+
                 await Employees.update(initial.id, patch);
             }}
             backHref="/dashboard/people/employees"

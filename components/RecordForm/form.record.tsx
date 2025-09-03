@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { z, ZodSchema } from "zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -52,9 +52,10 @@ type BaseFieldType =
     | "date"
     | "textarea"
     | "select"
+    | "multiselect"   // 👈 novo
     | "hidden";
 
-// 👇 NOVO tipo p/ relacionamentos remotos
+// 👇 tipo p/ relacionamentos remotos
 type RemoteSelectType = "remote-select";
 
 export type FieldType = BaseFieldType | RemoteSelectType;
@@ -77,7 +78,7 @@ export type FieldConfig = {
     required?: boolean;
     disabled?: boolean;
     hidden?: boolean;
-    options?: ReadonlyArray<Option>; // still used for "select" estático
+    options?: ReadonlyArray<Option>; // para "select"/"multiselect" estático
     // 👇 só para "remote-select"
     remote?: RemoteSource;
 };
@@ -125,12 +126,19 @@ function safeToIso(input: string): string | undefined {
 }
 
 function parseTypes(
-    raw: Record<string, FormDataEntryValue>,
+    raw: Record<string, any>,
     typeHints?: Record<string, TypeHint>
 ) {
     const out: Record<string, any> = {};
     for (const [k, v] of Object.entries(raw)) {
         const hint = typeHints?.[k];
+
+        // 👇 suporte a arrays (multiselect)
+        if (Array.isArray(v)) {
+            out[k] = v.map((x) => String(x));
+            continue;
+        }
+
         const str = typeof v === "string" ? v : String(v);
         const trimmed = str.trim();
 
@@ -277,7 +285,7 @@ function RemoteSelectField({
                 q = q.or(ors);
             }
 
-            const { data, error, count } = await q;
+            const { data, error } = await q;
             if (error) throw error;
 
             const newOpts: Option[] = (data ?? []).map((r: any) => ({
@@ -416,10 +424,14 @@ export default function RecordForm({
         const formEl = e.target as HTMLFormElement;
         const formData = new FormData(formEl);
 
-        // coleta valores (atenção: remote-select injeta <input hidden name=...>)
+        // coleta valores (atenção: multiselect e remote-select)
         const raw: Record<string, any> = {};
         fieldList.forEach((f) => {
-            raw[f.name] = formData.get(f.name);
+            if (f.type === "multiselect") {
+                raw[f.name] = formData.getAll(f.name);
+            } else {
+                raw[f.name] = formData.get(f.name);
+            }
         });
 
         // tipagem
@@ -449,6 +461,16 @@ export default function RecordForm({
         } finally {
             setIsLoading(false);
         }
+    };
+
+    // helper para normalizar defaultValue de multiselect
+    const toArray = (dv: any): string[] => {
+        if (Array.isArray(dv)) return dv.map(String);
+        if (typeof dv === "string") {
+            if (dv.includes(",")) return dv.split(",").map((s) => s.trim()).filter(Boolean);
+            return dv ? [dv] : [];
+        }
+        return [];
     };
 
     return (
@@ -535,6 +557,18 @@ export default function RecordForm({
                                                     options={field.options ?? []}
                                                     placeholder={field.placeholder}
                                                     error={err}
+                                                    mode="single"
+                                                />
+                                            ) : field.type === "multiselect" ? (
+                                                <SelectField
+                                                    name={field.name}
+                                                    defaultValue={toArray(defaultValue)}
+                                                    required={field.required}
+                                                    disabled={field.disabled}
+                                                    options={field.options ?? []}
+                                                    placeholder={field.placeholder}
+                                                    error={err}
+                                                    mode="multiple"
                                                 />
                                             ) : field.type === "remote-select" && field.remote ? (
                                                 <RemoteSelectField
