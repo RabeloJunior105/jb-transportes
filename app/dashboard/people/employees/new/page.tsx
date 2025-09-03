@@ -2,10 +2,9 @@
 
 import RecordForm from "@/components/RecordForm/form.record";
 import { createCrudClient } from "@/lib/supabase-crud/client/client";
-import { CreateEmployee } from "@/lib/supabase-crud/types";
-import type { Employee } from "@/lib/supabase/types/people.types";
-import { employeeFormConfig, schema } from "../config";
+import { CreateEmployee, Employee, employeeFormConfig, schema } from "../config";
 import { z } from "zod";
+import { createClient as createBrowserClient } from "@/lib/supabase/client";
 
 const Employees = createCrudClient<Employee, CreateEmployee>({
   table: "employees",
@@ -23,11 +22,29 @@ export default function NewEmployeePage() {
       schema={schema}
       typeHints={{
         hire_date: "date",
-        cnh_expiry: "date",
+        license_expiry: "date",
         salary: "number",
       }}
       onSubmit={async (values) => {
-        await Employees.create(values as CreateEmployee);
+        try {
+          const sb = createBrowserClient();
+          const { data: { user }, error } = await sb.auth.getUser();
+          if (error) throw error;
+          if (!user) throw new Error("Usuário não autenticado");
+
+          delete (values as any).id; // não enviar id no insert
+
+          values.license_category = Array.isArray(values.license_category)
+            ? values.license_category.join(",")
+            : values
+
+          const payload = { ...values, user_id: user.id };
+
+          console.log(payload)
+          await Employees.create(payload as CreateEmployee);
+        } catch (error) {
+          console.log(error)
+        }
       }}
       backHref="/dashboard/people/employees"
     />
