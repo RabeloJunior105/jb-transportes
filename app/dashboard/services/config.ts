@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const SERVICES_TABLE = "services" as const;
 
-/** ---------- Form Config ---------- */
+/** ---------- Returning ---------- */
 export const servicesFormConfig = {
     title: "Serviço",
     description: "Cadastre e gerencie serviços de transporte",
@@ -112,6 +112,7 @@ export const servicesFormConfig = {
                         labelKey: "name",
                         searchKeys: ["name", "document"],
                         userScoped: true,
+                        // filters: [{ column: "position", op: "ilike", value: "%motorista%" }],
                     },
                 },
             ],
@@ -170,14 +171,8 @@ export const serviceSchema = z.object({
     vehicle_id: z.string().uuid({ message: "vehicle_id deve ser UUID" }),
     driver_id: z.string().uuid({ message: "driver_id deve ser UUID" }),
 
-    // Agora tratamos datas como string no formato YYYY-MM-DD
-    collection_date: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Data de coleta inválida" }),
-    delivery_date: z
-        .string()
-        .regex(/^\d{4}-\d{2}-\d{2}$/)
-        .optional(),
+    collection_date: z.coerce.date({ message: "Data de coleta inválida" }),
+    delivery_date: z.coerce.date().optional(),
 
     origin: z.string().min(1, "Origem obrigatória"),
     destination: z.string().min(1, "Destino obrigatório"),
@@ -225,8 +220,8 @@ export interface Service {
     vehicle_id: string;
     driver_id: string;
 
-    collection_date: string;        // YYYY-MM-DD
-    delivery_date: string | null;   // YYYY-MM-DD
+    collection_date: string;        // ISO
+    delivery_date: string | null;   // ISO
 
     origin: string;
     destination: string;
@@ -249,8 +244,8 @@ export interface CreateService {
     vehicle_id: string;
     driver_id: string;
 
-    collection_date: string;       // YYYY-MM-DD
-    delivery_date?: string | null; // YYYY-MM-DD
+    collection_date: string;       // ISO
+    delivery_date?: string | null; // ISO
 
     origin: string;
     destination: string;
