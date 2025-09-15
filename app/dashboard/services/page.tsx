@@ -66,7 +66,12 @@ export type ServiceRow = {
 
 // ================== HELPERS ==================
 const currencyBRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const fmtDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
+const fmtDate = (iso?: string | null) => {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+};
+
 const one = <T,>(v: any): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
 
 // ================== SUMMARY ==================

@@ -48,7 +48,11 @@ type ServiceRow = {
 };
 
 const currencyBRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const fmtDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
+const fmtDate = (iso?: string | null) => {
+    if (!iso) return "—";
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+};
 const UUID_RE =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
