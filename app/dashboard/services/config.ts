@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const SERVICES_TABLE = "services" as const;
 
-/** ---------- Form Config ---------- */
+/** ---------- Returning ---------- */
 export const servicesFormConfig = {
     title: "Serviço",
     description: "Cadastre e gerencie serviços de transporte",
