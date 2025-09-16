@@ -189,6 +189,7 @@ export interface CreatePayable {
 
     payment_method?: Payable["payment_method"];
     status?: Payable["status"];
+    user_id?: string
 }
 
 export type UpdatePayable = Partial<

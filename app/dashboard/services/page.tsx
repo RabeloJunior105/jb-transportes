@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -71,15 +71,12 @@ const fmtDate = (iso?: string | null) => {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 };
-
-const one = <T,>(v: any): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null));
+const one = <T,>(v: any): T | null => (Array.isArray(v) ? v[0] ?? null : v ?? null);
 
 // ================== SUMMARY ==================
 async function getSummaryServices() {
   const sb = createBrowserClient();
-  const { data, error } = await sb
-    .from("services")
-    .select("status, service_value, toll_cost, fuel_cost, other_costs");
+  const { data, error } = await sb.from("services").select("status, service_value, toll_cost, fuel_cost, other_costs");
   if (error) throw error;
 
   const rows = data ?? [];
@@ -105,12 +102,7 @@ const fetchServices = makeFetchDataClient<ServiceRow>({
   select: SERVICES_SELECT,
   defaultOrder: { column: "collection_date", ascending: false },
   searchFields: ["service_code", "origin", "destination", "description"],
-  filterMap: {
-    status: "status",
-    client_id: "client_id",
-    vehicle_id: "vehicle_id",
-    driver_id: "driver_id",
-  },
+  filterMap: { status: "status", client_id: "client_id", vehicle_id: "vehicle_id", driver_id: "driver_id" },
 });
 
 // ================== DELETE ==================
@@ -138,6 +130,28 @@ export default function ServicesPage() {
   const [deleting, setDeleting] = useState(false);
   const [target, setTarget] = useState<ServiceRow | null>(null);
 
+  const [clientOptions, setClientOptions] = useState<{ label: string; value: string }[]>([]);
+  const [vehicleOptions, setVehicleOptions] = useState<{ label: string; value: string }[]>([]);
+  const [driverOptions, setDriverOptions] = useState<{ label: string; value: string }[]>([]);
+
+  // carregar filtros dinâmicos
+  useEffect(() => {
+    const loadFilters = async () => {
+      const sb = createBrowserClient();
+
+      const [{ data: clients }, { data: vehicles }, { data: drivers }] = await Promise.all([
+        sb.from("clients").select("id, name").order("name"),
+        sb.from("vehicles").select("id, plate, brand, model").order("plate"),
+        sb.from("employees").select("id, name").order("name"),
+      ]);
+
+      setClientOptions((clients ?? []).map((c) => ({ label: c.name ?? "Sem nome", value: c.id })));
+      setVehicleOptions((vehicles ?? []).map((v) => ({ label: `${v.plate} - ${[v.brand, v.model].filter(Boolean).join(" ")}`, value: v.id })));
+      setDriverOptions((drivers ?? []).map((d) => ({ label: d.name ?? "Sem nome", value: d.id })));
+    };
+    loadFilters();
+  }, []);
+
   const openDeleteModal = (row: ServiceRow) => {
     setTarget(row);
     setConfirmOpen(true);
@@ -160,10 +174,84 @@ export default function ServicesPage() {
     }
   };
 
+  // ================== SYNC RECEIVABLES/PAYABLES ==================
+  async function handleSyncFinance() {
+    const sb = createBrowserClient();
+    const { data: services, error } = await sb.from("services").select("*");
+    if (error) throw error;
+
+    let createdReceivables = 0;
+    let createdPayables = 0;
+
+    for (const service of services ?? []) {
+      // --- Accounts Receivable (usa service_id direto)
+      const { data: existingReceivable } = await sb.from("accounts_receivable").select("id").eq("service_id", service.id);
+
+      if (!existingReceivable || existingReceivable.length === 0) {
+        await sb.from("accounts_receivable").insert({
+          service_id: service.id,
+          description: `Receita do serviço ${service.service_code}`,
+          amount: service.service_value,
+          due_date: service.delivery_date ?? new Date().toISOString(),
+          status: "pending",
+          user_id: service.user_id,
+          client_id: service.client_id,
+        });
+        createdReceivables++;
+      }
+
+      // --- Accounts Payable (sem service_id, checa pela descrição)
+      const { data: existingPayable } = await sb.from("accounts_payable").select("id").like("description", `%${service.service_code}%`);
+
+      if (!existingPayable || existingPayable.length === 0) {
+        const payables: any[] = [];
+
+        if (service.fuel_cost > 0) {
+          payables.push({
+            description: `[SVC-${service.service_code}] Combustível`,
+            category: "fuel",
+            amount: service.fuel_cost,
+            due_date: new Date().toISOString(),
+            status: "pending",
+            user_id: service.user_id,
+          });
+        }
+        if (service.toll_cost > 0) {
+          payables.push({
+            description: `[SVC-${service.service_code}] Pedágio`,
+            category: "toll",
+            amount: service.toll_cost,
+            due_date: new Date().toISOString(),
+            status: "pending",
+            user_id: service.user_id,
+          });
+        }
+        if (service.other_costs > 0) {
+          payables.push({
+            description: `[SVC-${service.service_code}] Outros`,
+            category: "other",
+            amount: service.other_costs,
+            due_date: new Date().toISOString(),
+            status: "pending",
+            user_id: service.user_id,
+          });
+        }
+
+        if (payables.length > 0) {
+          await sb.from("accounts_payable").insert(payables);
+          createdPayables += payables.length;
+        }
+      }
+    }
+
+    toast.success(`Sincronização concluída! ${createdReceivables} receitas e ${createdPayables} despesas criadas.`);
+    setRefreshKey((k) => k + 1);
+  }
+
   return (
     <div className="flex-1 p-4 md:p-8 pt-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-3">
           <Truck className="h-7 w-7" />
           <div>
@@ -171,12 +259,17 @@ export default function ServicesPage() {
             <p className="text-muted-foreground">Gestão de serviços de transporte</p>
           </div>
         </div>
-        <Link href="/dashboard/services/new">
-          <Button className="bg-primary hover:bg-primary/90">
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Serviço
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={handleSyncFinance}>
+            Sincronizar Financeiro
           </Button>
-        </Link>
+          <Link href="/dashboard/services/new">
+            <Button className="bg-primary hover:bg-primary/90">
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Serviço
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Summary */}
@@ -187,7 +280,6 @@ export default function ServicesPage() {
           { title: "Pendentes", icon: <AlertTriangle />, valueKey: "pendingServices", colorClass: "text-chart-2" },
           { title: "Em Andamento", icon: <CheckCircle />, valueKey: "inProgressServices", colorClass: "text-chart-1" },
           { title: "Concluídos", icon: <CheckCircle />, valueKey: "completedServices", colorClass: "text-chart-3" },
-          // { title: "Faturamento", icon: <CreditCard />, valueKey: "totalRevenue", format: (v) => currencyBRL.format(Number(v || 0)) }
         ]}
       />
 
@@ -209,6 +301,9 @@ export default function ServicesPage() {
               { label: "Cancelado", value: "canceled" },
             ],
           },
+          { name: "client_id", label: "Cliente", options: clientOptions },
+          { name: "vehicle_id", label: "Veículo", options: vehicleOptions },
+          { name: "driver_id", label: "Motorista", options: driverOptions },
         ]}
         fields={[
           {
@@ -216,11 +311,11 @@ export default function ServicesPage() {
             label: "Serviço",
             type: "text",
             render: (val, row) => (
-              <Link href={`/dashboard/services/${row.id}`} className="block hover:underline">
-                <div className="font-medium">{val}</div>
-                <div className="text-xs text-muted-foreground flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />
-                  {(row.origin || "—")} <span className="opacity-60">→</span> {(row.destination || "—")}
+              <Link href={`/dashboard/services/${row.id}`} className="block hover:underline max-w-[200px] truncate">
+                <div className="font-medium truncate">{val}</div>
+                <div className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                  <MapPin className="h-3 w-3 shrink-0" />
+                  {row.origin || "—"} <span className="opacity-60">→</span> {row.destination || "—"}
                 </div>
               </Link>
             ),
@@ -232,7 +327,7 @@ export default function ServicesPage() {
             render: (_: any, row) => {
               const c = one<ClientRef>(row.client);
               return c ? (
-                <Link href={`/dashboard/clients/${c.id}`} className="hover:underline">
+                <Link href={`/dashboard/clients/${c.id}`} className="hover:underline block max-w-[160px] truncate">
                   {c.name || "—"}
                 </Link>
               ) : "—";
@@ -247,9 +342,9 @@ export default function ServicesPage() {
               if (!v) return "—";
               const title = [v.brand, v.model].filter(Boolean).join(" ") || v.plate;
               return (
-                <Link href={`/dashboard/fleet/vehicles/${v.id}`} className="block hover:underline">
-                  <div className="font-medium">{title}</div>
-                  <div className="text-xs text-muted-foreground tracking-wide">{v.plate}</div>
+                <Link href={`/dashboard/fleet/vehicles/${v.id}`} className="block hover:underline max-w-[160px] truncate">
+                  <div className="font-medium truncate">{title}</div>
+                  <div className="text-xs text-muted-foreground tracking-wide truncate">{v.plate}</div>
                 </Link>
               );
             },
@@ -261,18 +356,13 @@ export default function ServicesPage() {
             render: (_: any, row) => {
               const d = one<DriverRef>(row.driver);
               return d ? (
-                <Link href={`/dashboard/people/employees/${d.id}`} className="hover:underline">
+                <Link href={`/dashboard/people/employees/${d.id}`} className="hover:underline block max-w-[160px] truncate">
                   {d.name || "—"}
                 </Link>
               ) : "—";
             },
           },
-          {
-            name: "collection_date",
-            label: "Coleta",
-            type: "text",
-            render: (v) => fmtDate(String(v)),
-          },
+          { name: "collection_date", label: "Coleta", type: "text", render: (v) => fmtDate(String(v)) },
           {
             name: "service_value",
             label: "Valor",
@@ -280,29 +370,19 @@ export default function ServicesPage() {
             render: (v, row) => {
               const totalCosts = Number(row.toll_cost ?? 0) + Number(row.fuel_cost ?? 0) + Number(row.other_costs ?? 0);
               return (
-                <div>
+                <div className="max-w-[140px]">
                   <div className="font-medium">{currencyBRL.format(Number(v ?? 0))}</div>
-                  <div className="text-xs text-muted-foreground">Custos: {currencyBRL.format(totalCosts)}</div>
+                  <div className="text-xs text-muted-foreground truncate">Custos: {currencyBRL.format(totalCosts)}</div>
                 </div>
               );
             },
           },
-          {
-            name: "status",
-            label: "Status",
-            type: "badge",
-            render: (val) => statusBadge(val),
-          },
+          { name: "status", label: "Status", type: "badge", render: (val) => statusBadge(val) },
         ]}
         actions={[
           { label: "Visualizar", icon: <Eye className="h-4 w-4" />, href: (row) => `/dashboard/services/${row.id}` },
           { label: "Editar", icon: <Edit className="h-4 w-4" />, href: (row) => `/dashboard/services/${row.id}/edit` },
-          {
-            label: "Excluir",
-            icon: <Trash2 className="h-4 w-4" />,
-            color: "destructive",
-            onClick: (row) => openDeleteModal(row),
-          },
+          { label: "Excluir", icon: <Trash2 className="h-4 w-4" />, color: "destructive", onClick: (row) => openDeleteModal(row) },
         ]}
       />
 
@@ -314,8 +394,7 @@ export default function ServicesPage() {
         title="Excluir serviço"
         description={
           <>
-            Tem certeza que deseja excluir o serviço{" "}
-            <strong>{target?.service_code}</strong>? Essa ação não pode ser desfeita.
+            Tem certeza que deseja excluir o serviço <strong>{target?.service_code}</strong>? Essa ação não pode ser desfeita.
           </>
         }
         confirmText="Excluir"
