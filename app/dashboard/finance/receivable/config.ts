@@ -189,15 +189,13 @@ export interface Receivable {
 export interface CreateReceivable {
     client_id: string;
     service_id?: string | null;
-
     description: string;
     amount: number;
-
     due_date: string;            // ISO
     payment_date?: string | null;
-
     payment_method?: Receivable["payment_method"];
     status?: Receivable["status"];
+    user_id?: string;   // 👉 adicionar aqui
 }
 
 export type UpdateReceivable = Partial<
