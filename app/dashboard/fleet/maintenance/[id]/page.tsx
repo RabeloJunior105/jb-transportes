@@ -23,10 +23,7 @@ import {
     CardDescription,
 } from "@/components/ui/card";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
-
-import pdfMake from "pdfmake/build/pdfmake.js";
-import pdfFonts from "pdfmake/build/vfs_fonts.js";
-(pdfMake as any).vfs = pdfFonts.vfs;
+import { usePdfMake } from "@/lib/usePdkMake";
 
 type VehicleRef =
     | { id: string; plate: string; brand?: string | null; model?: string | null }
@@ -68,15 +65,11 @@ function one<T>(v: any): T | null {
     return Array.isArray(v) ? v[0] ?? null : v ?? null;
 }
 
-function generateMaintenanceReport(row: MaintenanceRow) {
+function generateMaintenanceReport(row: MaintenanceRow, pdfMake: any) {
     const v = row.vehicle as VehicleRef | null;
     const s = row.supplier as SupplierRef | null;
 
-    // Exemplo: base64 da logo (troque pelo seu real)
-    /* const logoBase64 =
-        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..." */
-
-    const primaryColor = "#a90037"; // COR DO SISTEMA
+    const primaryColor = "#a90037"; // sua cor do sistema
 
     const isList =
         row.description &&
@@ -113,10 +106,6 @@ function generateMaintenanceReport(row: MaintenanceRow) {
         header: {
             margin: [40, 20, 40, 0],
             columns: [
-                /* {
-                    image: logoBase64,
-                    width: 40,
-                }, */
                 {
                     text: "JB Transportes",
                     style: "companyName",
@@ -216,9 +205,6 @@ function generateMaintenanceReport(row: MaintenanceRow) {
     pdfMake.createPdf(docDefinition).open();
 }
 
-
-
-
 export default function MaintenanceViewPage() {
     const params = useParams();
     const rawId = (
@@ -230,6 +216,8 @@ export default function MaintenanceViewPage() {
     const sb = useMemo(() => createBrowserClient(), []);
     const [loading, setLoading] = useState(true);
     const [row, setRow] = useState<MaintenanceRow | null>(null);
+
+    const pdfMake = usePdfMake();
 
     useEffect(() => {
         (async () => {
@@ -341,8 +329,11 @@ export default function MaintenanceViewPage() {
                                 <Calendar className="h-4 w-4" />
                                 {fmtDate(row.maintenance_date)}
                             </span>
-                            <Badge className={typeMap[row.maintenance_type]?.cls || "border"}>
-                                {typeMap[row.maintenance_type]?.label || row.maintenance_type}
+                            <Badge
+                                className={typeMap[row.maintenance_type]?.cls || "border"}
+                            >
+                                {typeMap[row.maintenance_type]?.label ||
+                                    row.maintenance_type}
                             </Badge>
                             <Badge className={statusMap[row.status]?.cls || "border"}>
                                 {statusMap[row.status]?.label || row.status}
@@ -365,7 +356,8 @@ export default function MaintenanceViewPage() {
                     </Button>
                     <Button
                         variant="secondary"
-                        onClick={() => generateMaintenanceReport(row)}
+                        disabled={!pdfMake}
+                        onClick={() => pdfMake && generateMaintenanceReport(row, pdfMake)}
                     >
                         <FileDown className="mr-2 h-4 w-4" />
                         Exportar
@@ -380,7 +372,9 @@ export default function MaintenanceViewPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Resumo</CardTitle>
-                            <CardDescription>Detalhes principais da manutenção</CardDescription>
+                            <CardDescription>
+                                Detalhes principais da manutenção
+                            </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -397,7 +391,9 @@ export default function MaintenanceViewPage() {
                                     </div>
                                 </div>
                                 <div className="md:col-span-2">
-                                    <div className="text-xs text-muted-foreground">Descrição</div>
+                                    <div className="text-xs text-muted-foreground">
+                                        Descrição
+                                    </div>
                                     <div className="text-sm">{row.description || "—"}</div>
                                 </div>
                             </div>
@@ -410,7 +406,9 @@ export default function MaintenanceViewPage() {
                                 <Truck className="h-5 w-5" />
                                 Veículo
                             </CardTitle>
-                            <CardDescription>Informações do veículo vinculado</CardDescription>
+                            <CardDescription>
+                                Informações do veículo vinculado
+                            </CardDescription>
                         </CardHeader>
                         <CardContent>
                             {v ? (
@@ -441,7 +439,8 @@ export default function MaintenanceViewPage() {
                         <CardContent>
                             {row.supplier ? (
                                 <Link
-                                    href={`/dashboard/suppliers/${(row.supplier as SupplierRef)!.id}`}
+                                    href={`/dashboard/suppliers/${(row.supplier as SupplierRef)!.id
+                                        }`}
                                     className="hover:underline font-medium"
                                 >
                                     {(row.supplier as SupplierRef)!.name || "—"}
@@ -461,7 +460,9 @@ export default function MaintenanceViewPage() {
                         </CardHeader>
                         <CardContent className="space-y-2 text-sm">
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Data da manutenção</span>
+                                <span className="text-muted-foreground">
+                                    Data da manutenção
+                                </span>
                                 <span className="font-medium">
                                     {fmtDate(row.maintenance_date)}
                                 </span>
@@ -505,7 +506,8 @@ export default function MaintenanceViewPage() {
                                 {row.supplier && (
                                     <Button asChild variant="outline">
                                         <Link
-                                            href={`/dashboard/suppliers/${(row.supplier as SupplierRef)!.id}`}
+                                            href={`/dashboard/suppliers/${(row.supplier as SupplierRef)!.id
+                                                }`}
                                         >
                                             <Building2 className="mr-2 h-4 w-4" />
                                             Ver fornecedor
