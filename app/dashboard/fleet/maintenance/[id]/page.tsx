@@ -23,7 +23,11 @@ import {
     CardDescription,
 } from "@/components/ui/card";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
-import { usePdfMake } from "@/lib/usePdkMake";
+
+// ✅ Import do pdfmake ajustado
+import pdfMake from "pdfmake/build/pdfmake.js";
+import pdfFonts from "pdfmake/build/vfs_fonts.js";
+(pdfMake as any).vfs = (pdfFonts as any).vfs;
 
 type VehicleRef =
     | { id: string; plate: string; brand?: string | null; model?: string | null }
@@ -65,11 +69,11 @@ function one<T>(v: any): T | null {
     return Array.isArray(v) ? v[0] ?? null : v ?? null;
 }
 
-function generateMaintenanceReport(row: MaintenanceRow, pdfMake: any) {
+function generateMaintenanceReport(row: MaintenanceRow) {
     const v = row.vehicle as VehicleRef | null;
     const s = row.supplier as SupplierRef | null;
 
-    const primaryColor = "#a90037"; // sua cor do sistema
+    const primaryColor = "#a90037"; // cor da sua identidade visual
 
     const isList =
         row.description &&
@@ -84,7 +88,9 @@ function generateMaintenanceReport(row: MaintenanceRow, pdfMake: any) {
                         [{ text: "Itens Substituídos", style: "tableHeader" }],
                         ...row.description
                             .split(/,|\n/)
-                            .map((item) => [{ text: item.trim(), style: "tableCell" }])
+                            .map((item) => [
+                                { text: item.trim(), style: "tableCell" },
+                            ])
                             .filter((item) => item[0].text !== ""),
                     ],
                 },
@@ -124,8 +130,9 @@ function generateMaintenanceReport(row: MaintenanceRow, pdfMake: any) {
                 margin: [40, 10, 40, 0],
                 columns: [
                     {
-                        text: `Emitido em ${new Date().toLocaleDateString("pt-BR")} por ${row.user_id
-                            }`,
+                        text: `Emitido em ${new Date().toLocaleDateString(
+                            "pt-BR"
+                        )} por ${row.user_id}`,
                         style: "footer",
                     },
                     {
@@ -144,7 +151,10 @@ function generateMaintenanceReport(row: MaintenanceRow, pdfMake: any) {
                     widths: ["30%", "70%"],
                     body: [
                         ["Placa", v?.plate || "—"],
-                        ["Modelo", `${v?.brand || ""} ${v?.model || ""}`.trim() || "—"],
+                        [
+                            "Modelo",
+                            `${v?.brand || ""} ${v?.model || ""}`.trim() || "—",
+                        ],
                         ["Quilometragem", row.mileage || "—"],
                     ],
                 },
@@ -217,8 +227,6 @@ export default function MaintenanceViewPage() {
     const [loading, setLoading] = useState(true);
     const [row, setRow] = useState<MaintenanceRow | null>(null);
 
-    const pdfMake = usePdfMake();
-
     useEffect(() => {
         (async () => {
             try {
@@ -233,14 +241,14 @@ export default function MaintenanceViewPage() {
                     .from("maintenance")
                     .select(
                         `
-            id, user_id, vehicle_id, supplier_id,
-            maintenance_type, description, cost,
-            maintenance_date, next_maintenance_date,
-            mileage, status,
-            created_at, updated_at,
-            vehicle:vehicles ( id, plate, brand, model ),
-            supplier:suppliers ( id, name )
-          `
+                id, user_id, vehicle_id, supplier_id,
+                maintenance_type, description, cost,
+                maintenance_date, next_maintenance_date,
+                mileage, status,
+                created_at, updated_at,
+                vehicle:vehicles ( id, plate, brand, model ),
+                supplier:suppliers ( id, name )
+              `
                     )
                     .eq("id", id)
                     .maybeSingle();
@@ -321,7 +329,8 @@ export default function MaintenanceViewPage() {
                     <div>
                         <h1 className="text-2xl md:text-3xl font-bold leading-tight">
                             {v
-                                ? [v.brand, v.model].filter(Boolean).join(" ") || v.plate
+                                ? [v.brand, v.model].filter(Boolean).join(" ") ||
+                                v.plate
                                 : "Manutenção"}
                         </h1>
                         <div className="flex flex-wrap gap-2 mt-1 items-center">
@@ -330,12 +339,16 @@ export default function MaintenanceViewPage() {
                                 {fmtDate(row.maintenance_date)}
                             </span>
                             <Badge
-                                className={typeMap[row.maintenance_type]?.cls || "border"}
+                                className={
+                                    typeMap[row.maintenance_type]?.cls || "border"
+                                }
                             >
                                 {typeMap[row.maintenance_type]?.label ||
                                     row.maintenance_type}
                             </Badge>
-                            <Badge className={statusMap[row.status]?.cls || "border"}>
+                            <Badge
+                                className={statusMap[row.status]?.cls || "border"}
+                            >
                                 {statusMap[row.status]?.label || row.status}
                             </Badge>
                         </div>
@@ -356,8 +369,7 @@ export default function MaintenanceViewPage() {
                     </Button>
                     <Button
                         variant="secondary"
-                        disabled={!pdfMake}
-                        onClick={() => pdfMake && generateMaintenanceReport(row, pdfMake)}
+                        onClick={() => generateMaintenanceReport(row)}
                     >
                         <FileDown className="mr-2 h-4 w-4" />
                         Exportar
@@ -379,13 +391,19 @@ export default function MaintenanceViewPage() {
                         <CardContent>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <div>
-                                    <div className="text-xs text-muted-foreground">Custo</div>
+                                    <div className="text-xs text-muted-foreground">
+                                        Custo
+                                    </div>
                                     <div className="text-lg font-semibold">
-                                        {currencyBRL.format(Number(row.cost ?? 0))}
+                                        {currencyBRL.format(
+                                            Number(row.cost ?? 0)
+                                        )}
                                     </div>
                                 </div>
                                 <div>
-                                    <div className="text-xs text-muted-foreground">Odômetro</div>
+                                    <div className="text-xs text-muted-foreground">
+                                        Odômetro
+                                    </div>
                                     <div className="text-lg font-semibold">
                                         {row.mileage ?? "—"}
                                     </div>
@@ -394,7 +412,9 @@ export default function MaintenanceViewPage() {
                                     <div className="text-xs text-muted-foreground">
                                         Descrição
                                     </div>
-                                    <div className="text-sm">{row.description || "—"}</div>
+                                    <div className="text-sm">
+                                        {row.description || "—"}
+                                    </div>
                                 </div>
                             </div>
                         </CardContent>
@@ -417,7 +437,9 @@ export default function MaintenanceViewPage() {
                                     className="block hover:underline"
                                 >
                                     <div className="font-medium">
-                                        {[v.brand, v.model].filter(Boolean).join(" ") || v.plate}
+                                        {[v.brand, v.model]
+                                            .filter(Boolean)
+                                            .join(" ") || v.plate}
                                     </div>
                                     <div className="text-xs text-muted-foreground tracking-wide">
                                         {v.plate}
@@ -446,7 +468,9 @@ export default function MaintenanceViewPage() {
                                     {(row.supplier as SupplierRef)!.name || "—"}
                                 </Link>
                             ) : (
-                                <div className="text-sm text-muted-foreground">—</div>
+                                <div className="text-sm text-muted-foreground">
+                                    —
+                                </div>
                             )}
                         </CardContent>
                     </Card>
@@ -476,16 +500,28 @@ export default function MaintenanceViewPage() {
                                 </span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Criado em</span>
-                                <span className="font-medium">{fmtDate(row.created_at)}</span>
+                                <span className="text-muted-foreground">
+                                    Criado em
+                                </span>
+                                <span className="font-medium">
+                                    {fmtDate(row.created_at)}
+                                </span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Atualizado em</span>
-                                <span className="font-medium">{fmtDate(row.updated_at)}</span>
+                                <span className="text-muted-foreground">
+                                    Atualizado em
+                                </span>
+                                <span className="font-medium">
+                                    {fmtDate(row.updated_at)}
+                                </span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Usuário</span>
-                                <span className="font-medium break-all">{row.user_id}</span>
+                                <span className="text-muted-foreground">
+                                    Usuário
+                                </span>
+                                <span className="font-medium break-all">
+                                    {row.user_id}
+                                </span>
                             </div>
                         </CardContent>
                     </Card>
