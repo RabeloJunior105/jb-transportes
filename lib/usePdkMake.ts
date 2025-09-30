@@ -9,8 +9,14 @@ export function usePdfMake() {
         (async () => {
             const pdfmakeModule = await import("pdfmake/build/pdfmake");
             const pdfFonts = await import("pdfmake/build/vfs_fonts");
-            (pdfmakeModule as any).vfs = (pdfFonts as any).pdfMake.vfs;
-            setPdfMake(pdfmakeModule);
+
+            const pdf = (pdfmakeModule as any).default || pdfmakeModule;
+
+            if (pdf && !pdf.vfs) {
+                pdf.vfs = (pdfFonts as any).pdfMake.vfs;
+            }
+
+            setPdfMake(pdf);
         })();
     }, []);
 

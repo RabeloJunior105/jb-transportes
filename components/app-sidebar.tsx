@@ -57,6 +57,7 @@ const data = {
       title: "Financeiro",
       icon: DollarSign,
       items: [
+        { title: "Orçamentos", url: "/dashboard/finance/budgets" },
         { title: "Contas a Pagar", url: "/dashboard/finance/payable" },
         { title: "Contas a Receber", url: "/dashboard/finance/receivable" },
       ],
