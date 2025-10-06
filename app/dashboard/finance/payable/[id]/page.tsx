@@ -59,7 +59,7 @@ export default function PayableViewPage() {
                 }
 
                 const { data, error, status } = await sb
-                    .from("payable")
+                    .from("accounts_payable")
                     .select(`
             id, user_id, supplier_id, description, category,
             amount, due_date, payment_date, payment_method, status,
